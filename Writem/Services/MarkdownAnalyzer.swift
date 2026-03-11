@@ -34,7 +34,7 @@ enum MarkdownAnalyzer {
         return items
     }
 
-    static func preflightIssues(for markdown: String, frontmatter: Frontmatter) -> [PreflightIssue] {
+    static func preflightIssues(for markdown: String, frontmatter: Frontmatter, documentURL: URL? = nil) -> [PreflightIssue] {
         var issues: [PreflightIssue] = []
         let body = FrontmatterParser.bodyText(from: markdown)
 
@@ -50,6 +50,7 @@ enum MarkdownAnalyzer {
 
         issues.append(contentsOf: headingHierarchyIssues(in: body))
         issues.append(contentsOf: emptyLinkIssues(in: body))
+        issues.append(contentsOf: imagePathIssues(in: body, documentURL: documentURL))
         issues.append(contentsOf: absolutePathIssues(in: body))
         issues.append(contentsOf: paragraphLengthIssues(in: body))
 
@@ -102,6 +103,41 @@ enum MarkdownAnalyzer {
             title: "Empty link",
             message: "A Markdown link is present but the destination is empty."
         )
+    }
+
+    private static func imagePathIssues(in markdown: String, documentURL: URL?) -> [PreflightIssue] {
+        let lines = markdown.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n")
+
+        return lines.enumerated().compactMap { index, line in
+            guard let imageReference = ImageResourceManager.imageReference(in: line) else {
+                return nil
+            }
+
+            let path = imageReference.path.trimmingCharacters(in: .whitespacesAndNewlines)
+            if path.hasPrefix("http://") || path.hasPrefix("https://") {
+                return nil
+            }
+
+            guard let resolvedURL = ImageResourceManager.resolveImageURL(for: path, relativeTo: documentURL) else {
+                return .init(
+                    severity: .warning,
+                    title: "Image path not verifiable",
+                    message: "Save the document to verify local image paths.",
+                    lineNumber: index + 1
+                )
+            }
+
+            guard FileManager.default.fileExists(atPath: resolvedURL.path) else {
+                return .init(
+                    severity: .error,
+                    title: "Missing image asset",
+                    message: "Referenced image `\(path)` does not exist on disk.",
+                    lineNumber: index + 1
+                )
+            }
+
+            return nil
+        }
     }
 
     private static func absolutePathIssues(in markdown: String) -> [PreflightIssue] {
@@ -198,4 +234,3 @@ enum MarkdownAnalyzer {
         return String(line[prefixRange]).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
-

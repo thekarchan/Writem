@@ -6,8 +6,10 @@ Build a Markdown editor that keeps source files native while giving writers a fo
 
 ## App shape
 
-Writem currently uses a document-based SwiftUI app:
+Writem currently uses a document-based SwiftUI app with shared source files across:
 
+- `Writem` target for iPhone and iPad
+- `WritemMac` target for native macOS
 - `DocumentGroup` handles opening and saving local Markdown files.
 - `EditorRootView` owns the top-level writing experience.
 - `MarkdownFileDocument` stores the raw Markdown source as the source of truth.
@@ -48,6 +50,10 @@ Writem currently uses a document-based SwiftUI app:
   - Default seed content for new files
 - `ClipboardService`
   - Cross-platform copy action for code blocks
+- `ImageResourceManager`
+  - Creates the local `assets/` folder
+  - Imports image files beside the current document
+  - Generates relative Markdown image paths
 
 ### Views
 
@@ -86,6 +92,8 @@ Writem currently uses a document-based SwiftUI app:
 - Heading outline extraction
 - Preflight core checks
 - Code block copy action in reading mode
+- Image import to local `assets/` with relative path insertion
+- Native macOS app target in the same Xcode project
 
 ### Reserved next
 
@@ -95,4 +103,3 @@ Writem currently uses a document-based SwiftUI app:
 - PDF / HTML export
 - block folding
 - publish-ready filesystem validation using the actual current document URL
-

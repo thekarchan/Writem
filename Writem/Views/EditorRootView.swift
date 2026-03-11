@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct EditorRootView: View {
     enum UtilityPanel {
@@ -6,7 +7,14 @@ struct EditorRootView: View {
         case preflight
     }
 
+    struct EditorAlertState: Identifiable {
+        let id = UUID()
+        let title: String
+        let message: String
+    }
+
     @Binding var document: MarkdownFileDocument
+    let fileURL: URL?
 
     @State private var mode: EditorMode = .writing
     @State private var columnVisibility: NavigationSplitViewVisibility = .detailOnly
@@ -14,13 +22,16 @@ struct EditorRootView: View {
     @State private var frontmatter: Frontmatter = .empty
     @State private var utilityPanel: UtilityPanel?
     @State private var jumpToLine: Int?
+    @State private var isImportingImages = false
+    @State private var editorAlert: EditorAlertState?
+    @State private var lastImportedAsset: ImportedImageAsset?
 
     private var outline: [OutlineItem] {
         MarkdownAnalyzer.outline(for: document.text)
     }
 
     private var issues: [PreflightIssue] {
-        MarkdownAnalyzer.preflightIssues(for: document.text, frontmatter: frontmatter)
+        MarkdownAnalyzer.preflightIssues(for: document.text, frontmatter: frontmatter, documentURL: fileURL)
     }
 
     private var errorCount: Int {
@@ -49,7 +60,9 @@ struct EditorRootView: View {
                     text: $document.text,
                     mode: mode,
                     lineWidth: lineWidthPreset.width,
-                    jumpToLine: jumpToLine
+                    documentURL: fileURL,
+                    jumpToLine: jumpToLine,
+                    onDropImageFiles: importImages(from:)
                 )
                 if let utilityPanel {
                     Divider()
@@ -69,6 +82,25 @@ struct EditorRootView: View {
         }
         .onChange(of: document.text) { _, _ in
             syncFrontmatter()
+        }
+        .fileImporter(
+            isPresented: $isImportingImages,
+            allowedContentTypes: [.image],
+            allowsMultipleSelection: true
+        ) { result in
+            switch result {
+            case .success(let urls):
+                _ = importImages(from: urls)
+            case .failure(let error):
+                editorAlert = .init(title: "Image import failed", message: error.localizedDescription)
+            }
+        }
+        .alert(item: $editorAlert) { alert in
+            Alert(
+                title: Text(alert.title),
+                message: Text(alert.message),
+                dismissButton: .default(Text("OK"))
+            )
         }
     }
 
@@ -127,6 +159,14 @@ struct EditorRootView: View {
                     }
 
                     pillButton(
+                        title: "Import Image",
+                        symbol: "photo.badge.plus",
+                        tint: Color(red: 0.13, green: 0.40, blue: 0.34)
+                    ) {
+                        isImportingImages = true
+                    }
+
+                    pillButton(
                         title: "Frontmatter",
                         symbol: "slider.horizontal.3",
                         tint: Color(red: 0.34, green: 0.22, blue: 0.16)
@@ -156,6 +196,12 @@ struct EditorRootView: View {
             Label("\(wordCount) words", systemImage: "text.word.spacing")
             Label("\(outline.count) headings", systemImage: "list.bullet.indent")
             Label("\(issues.count) checks", systemImage: "checkmark.seal")
+            if let lastImportedAsset {
+                Label(lastImportedAsset.relativePath, systemImage: "photo")
+                    .lineLimit(1)
+            } else if fileURL == nil {
+                Label("Save document to enable assets", systemImage: "externaldrive.badge.plus")
+            }
         }
         .font(.footnote)
         .foregroundStyle(.secondary)
@@ -195,6 +241,45 @@ struct EditorRootView: View {
         } else {
             document.text += "\n\n" + snippet.content
         }
+    }
+
+    @discardableResult
+    private func importImages(from urls: [URL]) -> Bool {
+        let imageURLs = urls.filter { ImageResourceManager.canImport($0) }
+        guard !imageURLs.isEmpty else {
+            editorAlert = .init(title: "Image import failed", message: "No supported image files were selected.")
+            return false
+        }
+
+        do {
+            let importedAssets = try ImageResourceManager.importImages(from: imageURLs, into: fileURL)
+            guard !importedAssets.isEmpty else {
+                return false
+            }
+
+            let references = importedAssets.map(\.markdownReference)
+            document.text = appendedMarkdownReferences(references, to: document.text)
+            lastImportedAsset = importedAssets.last
+            mode = .writing
+            return true
+        } catch {
+            editorAlert = .init(
+                title: "Image import failed",
+                message: error.localizedDescription
+            )
+            return false
+        }
+    }
+
+    private func appendedMarkdownReferences(_ references: [String], to text: String) -> String {
+        let insertion = references.joined(separator: "\n\n")
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !trimmed.isEmpty else {
+            return insertion + "\n"
+        }
+
+        return trimmed + "\n\n" + insertion + "\n"
     }
 
     private var editorBackground: some View {

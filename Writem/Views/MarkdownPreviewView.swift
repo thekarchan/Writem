@@ -3,6 +3,7 @@ import SwiftUI
 struct MarkdownPreviewView: View {
     let text: String
     let jumpToLine: Int?
+    let documentURL: URL?
 
     @State private var expandedCodeBlocks: Set<Int> = []
 
@@ -66,6 +67,9 @@ struct MarkdownPreviewView: View {
         case .code(let language, let content):
             codeBlock(id: block.id, language: language, content: content)
 
+        case .image(let altText, let path):
+            imageBlock(altText: altText, path: path)
+
         case .divider:
             Divider()
                 .padding(.vertical, 4)
@@ -119,6 +123,23 @@ struct MarkdownPreviewView: View {
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(Color.black.opacity(0.88))
+        )
+    }
+
+    private func imageBlock(altText: String, path: String) -> some View {
+        let resolvedURL = ImageResourceManager.resolveImageURL(for: path, relativeTo: documentURL)
+
+        return VStack(alignment: .leading, spacing: 10) {
+            ResolvedMarkdownImageView(url: resolvedURL, altText: altText)
+            Text(path)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color(red: 0.97, green: 0.95, blue: 0.91))
         )
     }
 
@@ -212,6 +233,12 @@ struct MarkdownPreviewView: View {
                 continue
             }
 
+            if let imageReference = ImageResourceManager.imageReference(in: trimmed) {
+                flushParagraph()
+                blocks.append(.init(id: lineNumber, kind: .image(altText: imageReference.altText, path: imageReference.path)))
+                continue
+            }
+
             if trimmed.hasPrefix("> ") {
                 flushParagraph()
                 blocks.append(.init(id: lineNumber, kind: .quote(String(trimmed.dropFirst(2)))))
@@ -262,6 +289,7 @@ private struct PreviewBlock: Identifiable {
         case quote(String)
         case list(marker: String, value: String)
         case code(language: String, content: String)
+        case image(altText: String, path: String)
         case divider
         case paragraph(String)
     }
@@ -269,3 +297,81 @@ private struct PreviewBlock: Identifiable {
     let id: Int
     let kind: Kind
 }
+
+private struct ResolvedMarkdownImageView: View {
+    let url: URL?
+    let altText: String
+
+    var body: some View {
+        Group {
+            if let url {
+                if url.isFileURL {
+                    if let image = platformImage(from: url) {
+                        platformImageView(image)
+                    } else {
+                        placeholder(message: "Unable to load local image")
+                    }
+                } else {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFit()
+                        case .failure:
+                            placeholder(message: "Unable to load remote image")
+                        default:
+                            ProgressView()
+                                .frame(maxWidth: .infinity, minHeight: 180)
+                        }
+                    }
+                }
+            } else {
+                placeholder(message: "Image preview unavailable")
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: 360)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    @ViewBuilder
+    private func platformImageView(_ image: PlatformImageValue) -> some View {
+        #if canImport(UIKit)
+        Image(uiImage: image)
+            .resizable()
+            .scaledToFit()
+        #elseif canImport(AppKit)
+        Image(nsImage: image)
+            .resizable()
+            .scaledToFit()
+        #endif
+    }
+
+    private func placeholder(message: String) -> some View {
+        VStack(spacing: 10) {
+            Image(systemName: "photo")
+                .font(.title2)
+            Text(altText.isEmpty ? message : altText)
+                .font(.headline)
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, minHeight: 180)
+        .background(Color.white.opacity(0.58))
+    }
+
+    private func platformImage(from url: URL) -> PlatformImageValue? {
+        #if canImport(UIKit)
+        return UIImage(contentsOfFile: url.path)
+        #elseif canImport(AppKit)
+        return NSImage(contentsOf: url)
+        #endif
+    }
+}
+
+#if canImport(UIKit)
+private typealias PlatformImageValue = UIImage
+#elseif canImport(AppKit)
+private typealias PlatformImageValue = NSImage
+#endif

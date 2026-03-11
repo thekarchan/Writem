@@ -5,7 +5,11 @@ struct EditorCanvasView: View {
 
     let mode: EditorMode
     let lineWidth: CGFloat
+    let documentURL: URL?
     let jumpToLine: Int?
+    let onDropImageFiles: ([URL]) -> Bool
+
+    @State private var isImageDropTarget = false
 
     var body: some View {
         Group {
@@ -13,7 +17,7 @@ struct EditorCanvasView: View {
             case .reading:
                 HStack {
                     Spacer(minLength: 0)
-                    MarkdownPreviewView(text: text, jumpToLine: jumpToLine)
+                    MarkdownPreviewView(text: text, jumpToLine: jumpToLine, documentURL: documentURL)
                         .frame(maxWidth: lineWidth, maxHeight: .infinity)
                         .padding(.vertical, 30)
                     Spacer(minLength: 0)
@@ -26,6 +30,26 @@ struct EditorCanvasView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .dropDestination(for: URL.self) { items, _ in
+            onDropImageFiles(items)
+        } isTargeted: { isTargeted in
+            isImageDropTarget = isTargeted
+        }
+        .overlay(alignment: .topTrailing) {
+            if isImageDropTarget {
+                Label("Drop image to import into assets", systemImage: "photo.badge.plus")
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(
+                        Capsule()
+                            .fill(Color.accentColor.opacity(0.92))
+                    )
+                    .foregroundStyle(.white)
+                    .padding(.top, 18)
+                    .padding(.trailing, 24)
+            }
+        }
     }
 
     private func centeredEditor(font: Font) -> some View {

@@ -26,6 +26,27 @@
 		BB0000000000000000000011 /* PreflightPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000117 /* PreflightPanelView.swift */; };
 		BB0000000000000000000012 /* MarkdownPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000118 /* MarkdownPreviewView.swift */; };
 		BB0000000000000000000013 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000119 /* Assets.xcassets */; };
+		BB0000000000000000000014 /* ImageResourceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000120 /* ImageResourceManager.swift */; };
+		BC0000000000000000000001 /* WritemApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000101 /* WritemApp.swift */; };
+		BC0000000000000000000002 /* MarkdownFileDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000102 /* MarkdownFileDocument.swift */; };
+		BC0000000000000000000003 /* EditorMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000103 /* EditorMode.swift */; };
+		BC0000000000000000000004 /* Frontmatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000104 /* Frontmatter.swift */; };
+		BC0000000000000000000005 /* OutlineItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000105 /* OutlineItem.swift */; };
+		BC0000000000000000000006 /* PreflightIssue.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000106 /* PreflightIssue.swift */; };
+		BC0000000000000000000007 /* LineWidthPreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000107 /* LineWidthPreset.swift */; };
+		BC0000000000000000000008 /* FrontmatterParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000108 /* FrontmatterParser.swift */; };
+		BC0000000000000000000009 /* MarkdownAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000109 /* MarkdownAnalyzer.swift */; };
+		BC000000000000000000000A /* SampleDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000110 /* SampleDocument.swift */; };
+		BC000000000000000000000B /* SnippetLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000111 /* SnippetLibrary.swift */; };
+		BC000000000000000000000C /* ClipboardService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000112 /* ClipboardService.swift */; };
+		BC000000000000000000000D /* EditorRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000113 /* EditorRootView.swift */; };
+		BC000000000000000000000E /* EditorCanvasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000114 /* EditorCanvasView.swift */; };
+		BC000000000000000000000F /* OutlineSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000115 /* OutlineSidebarView.swift */; };
+		BC0000000000000000000010 /* FrontmatterPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000116 /* FrontmatterPanelView.swift */; };
+		BC0000000000000000000011 /* PreflightPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000117 /* PreflightPanelView.swift */; };
+		BC0000000000000000000012 /* MarkdownPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000118 /* MarkdownPreviewView.swift */; };
+		BC0000000000000000000013 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000119 /* Assets.xcassets */; };
+		BC0000000000000000000014 /* ImageResourceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000120 /* ImageResourceManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -49,10 +70,19 @@
 		BB0000000000000000000117 /* PreflightPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreflightPanelView.swift; sourceTree = "<group>"; };
 		BB0000000000000000000118 /* MarkdownPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownPreviewView.swift; sourceTree = "<group>"; };
 		BB0000000000000000000119 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		BB0000000000000000000120 /* ImageResourceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageResourceManager.swift; sourceTree = "<group>"; };
+		BC00000000000000000000F1 /* WritemMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WritemMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		BB00000000000000000000D1 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BC00000000000000000000D1 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -86,6 +116,7 @@
 			isa = PBXGroup;
 			children = (
 				BB00000000000000000000F1 /* Writem.app */,
+				BC00000000000000000000F1 /* WritemMac.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -111,6 +142,7 @@
 				BB0000000000000000000110 /* SampleDocument.swift */,
 				BB0000000000000000000111 /* SnippetLibrary.swift */,
 				BB0000000000000000000112 /* ClipboardService.swift */,
+				BB0000000000000000000120 /* ImageResourceManager.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -148,6 +180,23 @@
 			productReference = BB00000000000000000000F1 /* Writem.app */;
 			productType = "com.apple.product-type.application";
 		};
+		BC0000000000000000000091 /* WritemMac */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BC00000000000000000000C2 /* Build configuration list for PBXNativeTarget "WritemMac" */;
+			buildPhases = (
+				BC00000000000000000000B1 /* Sources */,
+				BC00000000000000000000D1 /* Frameworks */,
+				BC00000000000000000000B2 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = WritemMac;
+			productName = WritemMac;
+			productReference = BC00000000000000000000F1 /* WritemMac.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -158,6 +207,9 @@
 				LastUpgradeCheck = 1600;
 				TargetAttributes = {
 					BB0000000000000000000091 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+					BC0000000000000000000091 = {
 						CreatedOnToolsVersion = 16.0;
 					};
 				};
@@ -176,6 +228,7 @@
 			projectRoot = "";
 			targets = (
 				BB0000000000000000000091 /* Writem */,
+				BC0000000000000000000091 /* WritemMac */,
 			);
 		};
 /* End PBXProject section */
@@ -186,6 +239,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				BB0000000000000000000013 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BC00000000000000000000B2 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BC0000000000000000000013 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -214,6 +275,33 @@
 				BB0000000000000000000010 /* FrontmatterPanelView.swift in Sources */,
 				BB0000000000000000000011 /* PreflightPanelView.swift in Sources */,
 				BB0000000000000000000012 /* MarkdownPreviewView.swift in Sources */,
+				BB0000000000000000000014 /* ImageResourceManager.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BC00000000000000000000B1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BC0000000000000000000001 /* WritemApp.swift in Sources */,
+				BC0000000000000000000002 /* MarkdownFileDocument.swift in Sources */,
+				BC0000000000000000000003 /* EditorMode.swift in Sources */,
+				BC0000000000000000000004 /* Frontmatter.swift in Sources */,
+				BC0000000000000000000005 /* OutlineItem.swift in Sources */,
+				BC0000000000000000000006 /* PreflightIssue.swift in Sources */,
+				BC0000000000000000000007 /* LineWidthPreset.swift in Sources */,
+				BC0000000000000000000008 /* FrontmatterParser.swift in Sources */,
+				BC0000000000000000000009 /* MarkdownAnalyzer.swift in Sources */,
+				BC000000000000000000000A /* SampleDocument.swift in Sources */,
+				BC000000000000000000000B /* SnippetLibrary.swift in Sources */,
+				BC000000000000000000000C /* ClipboardService.swift in Sources */,
+				BC000000000000000000000D /* EditorRootView.swift in Sources */,
+				BC000000000000000000000E /* EditorCanvasView.swift in Sources */,
+				BC000000000000000000000F /* OutlineSidebarView.swift in Sources */,
+				BC0000000000000000000010 /* FrontmatterPanelView.swift in Sources */,
+				BC0000000000000000000011 /* PreflightPanelView.swift in Sources */,
+				BC0000000000000000000012 /* MarkdownPreviewView.swift in Sources */,
+				BC0000000000000000000014 /* ImageResourceManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -337,7 +425,6 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
-				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Writem;
@@ -354,7 +441,6 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -368,7 +454,6 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
-				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Writem;
@@ -385,10 +470,61 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		BC00000000000000000000E1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Writem;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.karchan.writem.mac;
+				PRODUCT_NAME = WritemMac;
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		BC00000000000000000000E2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Writem;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.karchan.writem.mac;
+				PRODUCT_NAME = WritemMac;
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
 		};
@@ -409,6 +545,15 @@
 			buildConfigurations = (
 				BB00000000000000000000E3 /* Debug */,
 				BB00000000000000000000E4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BC00000000000000000000C2 /* Build configuration list for PBXNativeTarget "WritemMac" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BC00000000000000000000E1 /* Debug */,
+				BC00000000000000000000E2 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
