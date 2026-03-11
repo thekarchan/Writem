@@ -1,0 +1,13 @@
+.DS_Store
+.build/
+.derivedData/
+.derivedData-device/
+DerivedData/
+*.swp
+*.xcuserdatad/
+*.xcuserstate
+*.xccheckout
+*.moved-aside
+*.orig
+/.swiftpm/
+.swift-module-cache/

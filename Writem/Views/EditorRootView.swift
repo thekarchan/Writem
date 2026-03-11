@@ -1,0 +1,231 @@
+import SwiftUI
+
+struct EditorRootView: View {
+    enum UtilityPanel {
+        case frontmatter
+        case preflight
+    }
+
+    @Binding var document: MarkdownFileDocument
+
+    @State private var mode: EditorMode = .writing
+    @State private var columnVisibility: NavigationSplitViewVisibility = .detailOnly
+    @State private var lineWidthPreset: LineWidthPreset = .comfortable
+    @State private var frontmatter: Frontmatter = .empty
+    @State private var utilityPanel: UtilityPanel?
+    @State private var jumpToLine: Int?
+
+    private var outline: [OutlineItem] {
+        MarkdownAnalyzer.outline(for: document.text)
+    }
+
+    private var issues: [PreflightIssue] {
+        MarkdownAnalyzer.preflightIssues(for: document.text, frontmatter: frontmatter)
+    }
+
+    private var errorCount: Int {
+        issues.filter { $0.severity == .error }.count
+    }
+
+    private var warningCount: Int {
+        issues.filter { $0.severity == .warning }.count
+    }
+
+    private var wordCount: Int {
+        MarkdownAnalyzer.wordCount(for: document.text)
+    }
+
+    var body: some View {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            OutlineSidebarView(items: outline, issues: issues) { item in
+                mode = .reading
+                jumpToLine = item.lineNumber
+            }
+        } detail: {
+            VStack(spacing: 0) {
+                header
+                Divider()
+                EditorCanvasView(
+                    text: $document.text,
+                    mode: mode,
+                    lineWidth: lineWidthPreset.width,
+                    jumpToLine: jumpToLine
+                )
+                if let utilityPanel {
+                    Divider()
+                    utilityPanelView(utilityPanel)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 300)
+                        .background(Color.white.opacity(0.58))
+                }
+                statusBar
+            }
+            .background(editorBackground)
+            .navigationTitle(frontmatter.title.isEmpty ? "Untitled Draft" : frontmatter.title)
+        }
+        .navigationSplitViewStyle(.balanced)
+        .onAppear {
+            syncFrontmatter()
+        }
+        .onChange(of: document.text) { _, _ in
+            syncFrontmatter()
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(frontmatter.title.isEmpty ? "Writem" : frontmatter.title)
+                        .font(.system(size: 28, weight: .bold, design: .serif))
+                    Text("Single-column Markdown editing for iPhone, iPad, and Mac.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 12)
+
+                Picker("Mode", selection: $mode) {
+                    ForEach(EditorMode.allCases) { item in
+                        Label(item.rawValue, systemImage: item.symbolName).tag(item)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 320)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    pillButton(
+                        title: columnVisibility == .detailOnly ? "Outline" : "Hide Outline",
+                        symbol: "sidebar.left",
+                        tint: Color(red: 0.16, green: 0.22, blue: 0.30)
+                    ) {
+                        columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
+                    }
+
+                    Menu {
+                        ForEach(LineWidthPreset.allCases) { preset in
+                            Button(preset.title) {
+                                lineWidthPreset = preset
+                            }
+                        }
+                    } label: {
+                        pillLabel(title: lineWidthPreset.title, symbol: "arrow.left.and.right")
+                    }
+
+                    Menu {
+                        ForEach(SnippetLibrary.all) { snippet in
+                            Button {
+                                insert(snippet: snippet)
+                            } label: {
+                                Label(snippet.title, systemImage: snippet.symbolName)
+                            }
+                        }
+                    } label: {
+                        pillLabel(title: "Insert", symbol: "plus.square.on.square")
+                    }
+
+                    pillButton(
+                        title: "Frontmatter",
+                        symbol: "slider.horizontal.3",
+                        tint: Color(red: 0.34, green: 0.22, blue: 0.16)
+                    ) {
+                        utilityPanel = utilityPanel == .frontmatter ? nil : .frontmatter
+                    }
+
+                    pillButton(
+                        title: "Preflight \(errorCount)E/\(warningCount)W",
+                        symbol: "checklist",
+                        tint: Color(red: 0.60, green: 0.22, blue: 0.20)
+                    ) {
+                        utilityPanel = utilityPanel == .preflight ? nil : .preflight
+                    }
+                }
+                .padding(.vertical, 1)
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 20)
+        .padding(.bottom, 18)
+        .background(Color.white.opacity(0.68))
+    }
+
+    private var statusBar: some View {
+        HStack(spacing: 18) {
+            Label("\(wordCount) words", systemImage: "text.word.spacing")
+            Label("\(outline.count) headings", systemImage: "list.bullet.indent")
+            Label("\(issues.count) checks", systemImage: "checkmark.seal")
+        }
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 12)
+        .background(Color.white.opacity(0.38))
+    }
+
+    @ViewBuilder
+    private func utilityPanelView(_ panel: UtilityPanel) -> some View {
+        switch panel {
+        case .frontmatter:
+            FrontmatterPanelView(frontmatter: $frontmatter) { updated in
+                document.text = FrontmatterParser.merge(updated, into: document.text)
+            }
+            .padding(20)
+        case .preflight:
+            PreflightPanelView(issues: issues) { issue in
+                if let lineNumber = issue.lineNumber {
+                    mode = .reading
+                    jumpToLine = lineNumber
+                }
+            }
+            .padding(20)
+        }
+    }
+
+    private func syncFrontmatter() {
+        frontmatter = FrontmatterParser.parse(document.text)
+    }
+
+    private func insert(snippet: Snippet) {
+        let trimmed = document.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            document.text = snippet.content + "\n"
+        } else {
+            document.text += "\n\n" + snippet.content
+        }
+    }
+
+    private var editorBackground: some View {
+        LinearGradient(
+            colors: [
+                Color(red: 0.95, green: 0.92, blue: 0.86),
+                Color(red: 0.99, green: 0.98, blue: 0.95)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .ignoresSafeArea()
+    }
+
+    private func pillButton(title: String, symbol: String, tint: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            pillLabel(title: title, symbol: symbol)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 1)
+        .background(
+            Capsule()
+                .fill(tint.opacity(0.92))
+        )
+        .foregroundStyle(.white)
+    }
+
+    private func pillLabel(title: String, symbol: String) -> some View {
+        Label(title, systemImage: symbol)
+            .font(.subheadline.weight(.semibold))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+    }
+}
