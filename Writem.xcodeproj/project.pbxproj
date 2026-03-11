@@ -27,6 +27,13 @@
 		BB0000000000000000000012 /* MarkdownPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000118 /* MarkdownPreviewView.swift */; };
 		BB0000000000000000000013 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000119 /* Assets.xcassets */; };
 		BB0000000000000000000014 /* ImageResourceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000120 /* ImageResourceManager.swift */; };
+		BB0000000000000000000015 /* EditorSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000121 /* EditorSettingsStore.swift */; };
+		BB0000000000000000000016 /* MarkdownTableService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000122 /* MarkdownTableService.swift */; };
+		BB0000000000000000000017 /* MarkdownRenderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000123 /* MarkdownRenderService.swift */; };
+		BB0000000000000000000018 /* CodeHighlightingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000124 /* CodeHighlightingService.swift */; };
+		BB0000000000000000000019 /* DocumentExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000125 /* DocumentExportService.swift */; };
+		BB000000000000000000001A /* SettingsPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000126 /* SettingsPanelView.swift */; };
+		BB000000000000000000001B /* TableEditorPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000127 /* TableEditorPanelView.swift */; };
 		BC0000000000000000000001 /* WritemApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000101 /* WritemApp.swift */; };
 		BC0000000000000000000002 /* MarkdownFileDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000102 /* MarkdownFileDocument.swift */; };
 		BC0000000000000000000003 /* EditorMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000103 /* EditorMode.swift */; };
@@ -47,6 +54,13 @@
 		BC0000000000000000000012 /* MarkdownPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000118 /* MarkdownPreviewView.swift */; };
 		BC0000000000000000000013 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000119 /* Assets.xcassets */; };
 		BC0000000000000000000014 /* ImageResourceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000120 /* ImageResourceManager.swift */; };
+		BC0000000000000000000015 /* EditorSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000121 /* EditorSettingsStore.swift */; };
+		BC0000000000000000000016 /* MarkdownTableService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000122 /* MarkdownTableService.swift */; };
+		BC0000000000000000000017 /* MarkdownRenderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000123 /* MarkdownRenderService.swift */; };
+		BC0000000000000000000018 /* CodeHighlightingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000124 /* CodeHighlightingService.swift */; };
+		BC0000000000000000000019 /* DocumentExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000125 /* DocumentExportService.swift */; };
+		BC000000000000000000001A /* SettingsPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000126 /* SettingsPanelView.swift */; };
+		BC000000000000000000001B /* TableEditorPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000127 /* TableEditorPanelView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -71,6 +85,14 @@
 		BB0000000000000000000118 /* MarkdownPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownPreviewView.swift; sourceTree = "<group>"; };
 		BB0000000000000000000119 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		BB0000000000000000000120 /* ImageResourceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageResourceManager.swift; sourceTree = "<group>"; };
+		BB0000000000000000000121 /* EditorSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorSettingsStore.swift; sourceTree = "<group>"; };
+		BB0000000000000000000122 /* MarkdownTableService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownTableService.swift; sourceTree = "<group>"; };
+		BB0000000000000000000123 /* MarkdownRenderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownRenderService.swift; sourceTree = "<group>"; };
+		BB0000000000000000000124 /* CodeHighlightingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeHighlightingService.swift; sourceTree = "<group>"; };
+		BB0000000000000000000125 /* DocumentExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentExportService.swift; sourceTree = "<group>"; };
+		BB0000000000000000000126 /* SettingsPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPanelView.swift; sourceTree = "<group>"; };
+		BB0000000000000000000127 /* TableEditorPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TableEditorPanelView.swift; sourceTree = "<group>"; };
+		BB0000000000000000000128 /* Writem.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Writem.entitlements; sourceTree = "<group>"; };
 		BC00000000000000000000F1 /* WritemMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WritemMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -108,6 +130,7 @@
 				BB00000000000000000000A5 /* Services */,
 				BB00000000000000000000A6 /* Views */,
 				BB0000000000000000000119 /* Assets.xcassets */,
+				BB0000000000000000000128 /* Writem.entitlements */,
 			);
 			path = Writem;
 			sourceTree = "<group>";
@@ -143,6 +166,11 @@
 				BB0000000000000000000111 /* SnippetLibrary.swift */,
 				BB0000000000000000000112 /* ClipboardService.swift */,
 				BB0000000000000000000120 /* ImageResourceManager.swift */,
+				BB0000000000000000000121 /* EditorSettingsStore.swift */,
+				BB0000000000000000000122 /* MarkdownTableService.swift */,
+				BB0000000000000000000123 /* MarkdownRenderService.swift */,
+				BB0000000000000000000124 /* CodeHighlightingService.swift */,
+				BB0000000000000000000125 /* DocumentExportService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -156,6 +184,8 @@
 				BB0000000000000000000116 /* FrontmatterPanelView.swift */,
 				BB0000000000000000000117 /* PreflightPanelView.swift */,
 				BB0000000000000000000118 /* MarkdownPreviewView.swift */,
+				BB0000000000000000000126 /* SettingsPanelView.swift */,
+				BB0000000000000000000127 /* TableEditorPanelView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -276,6 +306,13 @@
 				BB0000000000000000000011 /* PreflightPanelView.swift in Sources */,
 				BB0000000000000000000012 /* MarkdownPreviewView.swift in Sources */,
 				BB0000000000000000000014 /* ImageResourceManager.swift in Sources */,
+				BB0000000000000000000015 /* EditorSettingsStore.swift in Sources */,
+				BB0000000000000000000016 /* MarkdownTableService.swift in Sources */,
+				BB0000000000000000000017 /* MarkdownRenderService.swift in Sources */,
+				BB0000000000000000000018 /* CodeHighlightingService.swift in Sources */,
+				BB0000000000000000000019 /* DocumentExportService.swift in Sources */,
+				BB000000000000000000001A /* SettingsPanelView.swift in Sources */,
+				BB000000000000000000001B /* TableEditorPanelView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -302,6 +339,13 @@
 				BC0000000000000000000011 /* PreflightPanelView.swift in Sources */,
 				BC0000000000000000000012 /* MarkdownPreviewView.swift in Sources */,
 				BC0000000000000000000014 /* ImageResourceManager.swift in Sources */,
+				BC0000000000000000000015 /* EditorSettingsStore.swift in Sources */,
+				BC0000000000000000000016 /* MarkdownTableService.swift in Sources */,
+				BC0000000000000000000017 /* MarkdownRenderService.swift in Sources */,
+				BC0000000000000000000018 /* CodeHighlightingService.swift in Sources */,
+				BC0000000000000000000019 /* DocumentExportService.swift in Sources */,
+				BC000000000000000000001A /* SettingsPanelView.swift in Sources */,
+				BC000000000000000000001B /* TableEditorPanelView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -422,6 +466,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Writem/Writem.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
@@ -451,6 +496,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Writem/Writem.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
@@ -480,6 +526,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Writem/Writem.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
@@ -506,6 +553,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Writem/Writem.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";

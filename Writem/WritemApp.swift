@@ -2,16 +2,20 @@ import SwiftUI
 
 @main
 struct WritemApp: App {
+    @StateObject private var settings = EditorSettingsStore()
+
     @SceneBuilder
     var body: some Scene {
         DocumentGroup(newDocument: MarkdownFileDocument()) { file in
             EditorRootView(document: file.$document, fileURL: file.fileURL)
+                .environmentObject(settings)
         }
 
         #if os(iOS)
         if #available(iOS 18.0, *) {
             DocumentGroupLaunchScene("Writem") {
                 WritemLaunchActionsView()
+                    .environmentObject(settings)
             } background: {
                 LinearGradient(
                     colors: [

@@ -5,6 +5,8 @@ struct EditorRootView: View {
     enum UtilityPanel {
         case frontmatter
         case preflight
+        case tables
+        case settings
     }
 
     struct EditorAlertState: Identifiable {
@@ -18,13 +20,16 @@ struct EditorRootView: View {
 
     @State private var mode: EditorMode = .writing
     @State private var columnVisibility: NavigationSplitViewVisibility = .detailOnly
-    @State private var lineWidthPreset: LineWidthPreset = .comfortable
     @State private var frontmatter: Frontmatter = .empty
     @State private var utilityPanel: UtilityPanel?
     @State private var jumpToLine: Int?
     @State private var isImportingImages = false
     @State private var editorAlert: EditorAlertState?
     @State private var lastImportedAsset: ImportedImageAsset?
+    @State private var pendingExport: ExportArtifact?
+    @State private var isExportingFile = false
+
+    @EnvironmentObject private var settings: EditorSettingsStore
 
     private var outline: [OutlineItem] {
         MarkdownAnalyzer.outline(for: document.text)
@@ -59,7 +64,7 @@ struct EditorRootView: View {
                 EditorCanvasView(
                     text: $document.text,
                     mode: mode,
-                    lineWidth: lineWidthPreset.width,
+                    lineWidth: settings.lineWidthPreset.width,
                     documentURL: fileURL,
                     jumpToLine: jumpToLine,
                     onDropImageFiles: importImages(from:)
@@ -102,6 +107,18 @@ struct EditorRootView: View {
                 dismissButton: .default(Text("OK"))
             )
         }
+        .fileExporter(
+            isPresented: $isExportingFile,
+            document: pendingExport?.document,
+            contentType: pendingExport?.contentType ?? .data,
+            defaultFilename: pendingExport?.defaultFilename ?? "writem-export"
+        ) { result in
+            if case .failure(let error) = result {
+                editorAlert = .init(title: "Export failed", message: error.localizedDescription)
+            }
+            pendingExport = nil
+        }
+        .preferredColorScheme(settings.preferredTheme.colorScheme)
     }
 
     private var header: some View {
@@ -139,11 +156,11 @@ struct EditorRootView: View {
                     Menu {
                         ForEach(LineWidthPreset.allCases) { preset in
                             Button(preset.title) {
-                                lineWidthPreset = preset
+                                settings.lineWidthPreset = preset
                             }
                         }
                     } label: {
-                        pillLabel(title: lineWidthPreset.title, symbol: "arrow.left.and.right")
+                        pillLabel(title: settings.lineWidthPreset.title, symbol: "arrow.left.and.right")
                     }
 
                     Menu {
@@ -175,11 +192,39 @@ struct EditorRootView: View {
                     }
 
                     pillButton(
+                        title: "Tables",
+                        symbol: "tablecells",
+                        tint: Color(red: 0.22, green: 0.34, blue: 0.56)
+                    ) {
+                        utilityPanel = utilityPanel == .tables ? nil : .tables
+                    }
+
+                    Menu {
+                        ForEach(ExportFormat.allCases) { format in
+                            Button {
+                                export(format)
+                            } label: {
+                                Label(format.title, systemImage: format.symbolName)
+                            }
+                        }
+                    } label: {
+                        pillLabel(title: "Export", symbol: "square.and.arrow.up")
+                    }
+
+                    pillButton(
                         title: "Preflight \(errorCount)E/\(warningCount)W",
                         symbol: "checklist",
                         tint: Color(red: 0.60, green: 0.22, blue: 0.20)
                     ) {
                         utilityPanel = utilityPanel == .preflight ? nil : .preflight
+                    }
+
+                    pillButton(
+                        title: "Settings",
+                        symbol: "gearshape",
+                        tint: Color(red: 0.30, green: 0.30, blue: 0.36)
+                    ) {
+                        utilityPanel = utilityPanel == .settings ? nil : .settings
                     }
                 }
                 .padding(.vertical, 1)
@@ -196,6 +241,7 @@ struct EditorRootView: View {
             Label("\(wordCount) words", systemImage: "text.word.spacing")
             Label("\(outline.count) headings", systemImage: "list.bullet.indent")
             Label("\(issues.count) checks", systemImage: "checkmark.seal")
+            Label(settings.showCodeLineNumbers ? "Code lines on" : "Code lines off", systemImage: "number")
             if let lastImportedAsset {
                 Label(lastImportedAsset.relativePath, systemImage: "photo")
                     .lineLimit(1)
@@ -219,6 +265,11 @@ struct EditorRootView: View {
                 document.text = FrontmatterParser.merge(updated, into: document.text)
             }
             .padding(20)
+        case .tables:
+            TableEditorPanelView(markdown: document.text) { updatedMarkdown in
+                document.text = updatedMarkdown
+            }
+            .padding(20)
         case .preflight:
             PreflightPanelView(issues: issues) { issue in
                 if let lineNumber = issue.lineNumber {
@@ -227,6 +278,9 @@ struct EditorRootView: View {
                 }
             }
             .padding(20)
+        case .settings:
+            SettingsPanelView()
+                .padding(20)
         }
     }
 
@@ -240,6 +294,24 @@ struct EditorRootView: View {
             document.text = snippet.content + "\n"
         } else {
             document.text += "\n\n" + snippet.content
+        }
+    }
+
+    private func export(_ format: ExportFormat) {
+        Task {
+            do {
+                let artifact = try await DocumentExportService.makeArtifact(
+                    format: format,
+                    markdown: document.text,
+                    frontmatter: frontmatter,
+                    documentURL: fileURL,
+                    showCodeLineNumbers: settings.showCodeLineNumbers
+                )
+                pendingExport = artifact
+                isExportingFile = true
+            } catch {
+                editorAlert = .init(title: "Export failed", message: error.localizedDescription)
+            }
         }
     }
 

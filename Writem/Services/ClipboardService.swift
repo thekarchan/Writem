@@ -16,5 +16,14 @@ enum ClipboardService {
         pasteboard.setString(value, forType: .string)
         #endif
     }
-}
 
+    static func readString() -> String? {
+        #if canImport(UIKit)
+        return UIPasteboard.general.string
+        #elseif canImport(AppKit)
+        return NSPasteboard.general.string(forType: .string)
+        #else
+        return nil
+        #endif
+    }
+}

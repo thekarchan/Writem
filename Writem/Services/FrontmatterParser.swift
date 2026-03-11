@@ -62,6 +62,22 @@ enum FrontmatterParser {
         return header + body + "\n"
     }
 
+    static func replacingBody(in markdown: String, with body: String) -> String {
+        let parts = split(markdown)
+        let normalizedBody = body.replacingOccurrences(of: "\r\n", with: "\n")
+
+        guard parts.hasFrontmatter else {
+            return normalizedBody
+        }
+
+        let frontmatterBlock = (["---"] + parts.frontmatterLines + ["---", ""]).joined(separator: "\n")
+        guard !normalizedBody.isEmpty else {
+            return frontmatterBlock
+        }
+
+        return frontmatterBlock + normalizedBody
+    }
+
     private static func split(_ markdown: String) -> (hasFrontmatter: Bool, frontmatterLines: [String], body: String) {
         let normalized = markdown.replacingOccurrences(of: "\r\n", with: "\n")
         let lines = normalized.components(separatedBy: "\n")

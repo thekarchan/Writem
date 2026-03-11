@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct MarkdownPreviewView: View {
+    @EnvironmentObject private var settings: EditorSettingsStore
+
     let text: String
     let jumpToLine: Int?
     let documentURL: URL?
@@ -70,6 +72,9 @@ struct MarkdownPreviewView: View {
         case .image(let altText, let path):
             imageBlock(altText: altText, path: path)
 
+        case .table(let table):
+            tableBlock(table)
+
         case .divider:
             Divider()
                 .padding(.vertical, 4)
@@ -86,6 +91,7 @@ struct MarkdownPreviewView: View {
         let lines = content.components(separatedBy: "\n")
         let isExpanded = expandedCodeBlocks.contains(id)
         let visibleLines = isExpanded ? lines : Array(lines.prefix(collapsedCodeLineCount))
+        let visibleContent = visibleLines.joined(separator: "\n")
 
         return VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -93,6 +99,11 @@ struct MarkdownPreviewView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.white.opacity(0.75))
                 Spacer()
+                if let supportLabel = codeSupportLabel(for: language) {
+                    Text(supportLabel)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.56))
+                }
                 Button("Copy") {
                     ClipboardService.copy(content)
                 }
@@ -100,11 +111,11 @@ struct MarkdownPreviewView: View {
                 .tint(.white.opacity(0.2))
             }
 
-            Text(visibleLines.joined(separator: "\n"))
-                .font(.system(size: 14, weight: .regular, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.94))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .textSelection(.enabled)
+            HighlightedCodeView(
+                code: visibleContent,
+                language: language,
+                showLineNumbers: settings.showCodeLineNumbers
+            )
 
             if lines.count > collapsedCodeLineCount {
                 Button(isExpanded ? "Collapse" : "Show \(lines.count - collapsedCodeLineCount) more lines") {
@@ -124,6 +135,57 @@ struct MarkdownPreviewView: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(Color.black.opacity(0.88))
         )
+    }
+
+    private func tableBlock(_ table: MarkdownTable) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            VStack(spacing: 0) {
+                HStack(spacing: 0) {
+                    ForEach(Array(table.headers.enumerated()), id: \.offset) { index, title in
+                        tableCell(title, weight: .semibold, background: Color(red: 0.95, green: 0.91, blue: 0.84), alignment: table.alignments[index])
+                    }
+                }
+
+                ForEach(Array(table.rows.enumerated()), id: \.offset) { _, row in
+                    HStack(spacing: 0) {
+                        ForEach(Array(row.enumerated()), id: \.offset) { index, value in
+                            tableCell(value, background: .white.opacity(0.9), alignment: table.alignments[index])
+                        }
+                    }
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color(red: 0.84, green: 0.78, blue: 0.70), lineWidth: 1)
+            )
+        }
+    }
+
+    private func tableCell(_ value: String, weight: Font.Weight = .regular, background: Color, alignment: MarkdownTable.ColumnAlignment) -> some View {
+        Text(value.isEmpty ? " " : value)
+            .font(.system(size: 15, weight: weight, design: .serif))
+            .frame(width: 180, alignment: frameAlignment(for: alignment))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(background)
+            .overlay(
+                Rectangle()
+                    .fill(Color(red: 0.84, green: 0.78, blue: 0.70))
+                    .frame(width: 1),
+                alignment: .trailing
+            )
+    }
+
+    private func frameAlignment(for alignment: MarkdownTable.ColumnAlignment) -> Alignment {
+        switch alignment {
+        case .leading:
+            return .leading
+        case .center:
+            return .center
+        case .trailing:
+            return .trailing
+        }
     }
 
     private func imageBlock(altText: String, path: String) -> some View {
@@ -167,135 +229,29 @@ struct MarkdownPreviewView: View {
         }
     }
 
-    private var blocks: [PreviewBlock] {
-        let lines = FrontmatterParser.bodyText(from: text)
-            .replacingOccurrences(of: "\r\n", with: "\n")
-            .components(separatedBy: "\n")
-
-        var blocks: [PreviewBlock] = []
-        var paragraphLines: [String] = []
-        var paragraphStartLine = 1
-        var inCodeBlock = false
-        var codeStartLine = 1
-        var codeLanguage = ""
-        var codeLines: [String] = []
-
-        func flushParagraph() {
-            let value = paragraphLines.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !value.isEmpty else {
-                paragraphLines.removeAll()
-                return
-            }
-
-            blocks.append(.init(id: paragraphStartLine, kind: .paragraph(value)))
-            paragraphLines.removeAll()
+    private func codeSupportLabel(for language: String) -> String? {
+        switch language.lowercased() {
+        case "mermaid":
+            return "DIAGRAM SOURCE"
+        case "json":
+            return "JSON"
+        case "yaml", "yml":
+            return "YAML"
+        case "latex", "tex":
+            return "LATEX"
+        default:
+            return nil
         }
-
-        for (index, line) in lines.enumerated() {
-            let lineNumber = index + 1
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-
-            if trimmed.hasPrefix("```") {
-                flushParagraph()
-                if inCodeBlock {
-                    blocks.append(.init(id: codeStartLine, kind: .code(language: codeLanguage, content: codeLines.joined(separator: "\n"))))
-                    codeLanguage = ""
-                    codeLines.removeAll()
-                } else {
-                    codeStartLine = lineNumber
-                    codeLanguage = String(trimmed.dropFirst(3)).trimmingCharacters(in: .whitespaces)
-                }
-                inCodeBlock.toggle()
-                continue
-            }
-
-            if inCodeBlock {
-                codeLines.append(line)
-                continue
-            }
-
-            if trimmed.isEmpty {
-                flushParagraph()
-                continue
-            }
-
-            let headingLevel = trimmed.prefix { $0 == "#" }.count
-            if (1...6).contains(headingLevel), trimmed.dropFirst(headingLevel).first == " " {
-                flushParagraph()
-                let title = trimmed.dropFirst(headingLevel + 1).trimmingCharacters(in: .whitespacesAndNewlines)
-                blocks.append(.init(id: lineNumber, kind: .heading(level: headingLevel, text: title)))
-                continue
-            }
-
-            if trimmed == "---" || trimmed == "***" {
-                flushParagraph()
-                blocks.append(.init(id: lineNumber, kind: .divider))
-                continue
-            }
-
-            if let imageReference = ImageResourceManager.imageReference(in: trimmed) {
-                flushParagraph()
-                blocks.append(.init(id: lineNumber, kind: .image(altText: imageReference.altText, path: imageReference.path)))
-                continue
-            }
-
-            if trimmed.hasPrefix("> ") {
-                flushParagraph()
-                blocks.append(.init(id: lineNumber, kind: .quote(String(trimmed.dropFirst(2)))))
-                continue
-            }
-
-            if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") {
-                flushParagraph()
-                let marker = String(trimmed.prefix(1))
-                let value = String(trimmed.dropFirst(2))
-                blocks.append(.init(id: lineNumber, kind: .list(marker: marker, value: value)))
-                continue
-            }
-
-            if let marker = orderedListMarker(in: trimmed) {
-                flushParagraph()
-                let value = trimmed.replacingOccurrences(of: marker + " ", with: "")
-                blocks.append(.init(id: lineNumber, kind: .list(marker: marker, value: value)))
-                continue
-            }
-
-            if paragraphLines.isEmpty {
-                paragraphStartLine = lineNumber
-            }
-            paragraphLines.append(trimmed)
-        }
-
-        flushParagraph()
-        return blocks
     }
 
-    private func orderedListMarker(in line: String) -> String? {
-        guard let regex = try? NSRegularExpression(pattern: #"^\d+\."#) else {
-            return nil
-        }
-        let range = NSRange(line.startIndex..<line.endIndex, in: line)
-        guard let match = regex.firstMatch(in: line, range: range),
-              let markerRange = Range(match.range, in: line) else {
-            return nil
-        }
-        return String(line[markerRange])
+    private var blocks: [PreviewBlock] {
+        MarkdownRenderService.blocks(from: text).map { PreviewBlock(id: $0.id, kind: $0.kind) }
     }
 }
 
 private struct PreviewBlock: Identifiable {
-    enum Kind {
-        case heading(level: Int, text: String)
-        case quote(String)
-        case list(marker: String, value: String)
-        case code(language: String, content: String)
-        case image(altText: String, path: String)
-        case divider
-        case paragraph(String)
-    }
-
     let id: Int
-    let kind: Kind
+    let kind: MarkdownRenderBlock.Kind
 }
 
 private struct ResolvedMarkdownImageView: View {
@@ -367,6 +323,43 @@ private struct ResolvedMarkdownImageView: View {
         #elseif canImport(AppKit)
         return NSImage(contentsOf: url)
         #endif
+    }
+}
+
+private struct HighlightedCodeView: View {
+    let code: String
+    let language: String
+    let showLineNumbers: Bool
+
+    private var lines: [[CodeToken]] {
+        CodeHighlightingService.highlightedLines(for: code, language: language)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(Array(lines.enumerated()), id: \.offset) { index, tokens in
+                HStack(alignment: .top, spacing: 12) {
+                    if showLineNumbers {
+                        Text("\(index + 1)")
+                            .font(.system(size: 12, weight: .regular, design: .monospaced))
+                            .foregroundStyle(.white.opacity(0.38))
+                            .frame(width: 28, alignment: .trailing)
+                    }
+
+                    tokenText(tokens)
+                        .font(.system(size: 14, weight: .regular, design: .monospaced))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+        .textSelection(.enabled)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func tokenText(_ tokens: [CodeToken]) -> Text {
+        tokens.reduce(Text("")) { partialResult, token in
+            partialResult + Text(token.text).foregroundColor(CodeHighlightingService.color(for: token.kind))
+        }
     }
 }
 
