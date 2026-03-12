@@ -10,11 +10,25 @@ private typealias PlatformFont = UIFont
 private typealias PlatformColor = UIColor
 #endif
 
+struct EditorCanvasCommand: Identifiable, Equatable {
+    enum Action: Equatable {
+        case bold
+        case italic
+        case inlineCode
+        case link
+    }
+
+    let id = UUID()
+    let action: Action
+}
+
 struct EditorCanvasView: View {
     @Binding var text: String
 
     let lineWidth: CGFloat
+    let command: EditorCanvasCommand?
     let onDropImageFiles: ([URL]) -> Bool
+    let onCommandHandled: (UUID) -> Void
 
     @State private var isImageDropTarget = false
     @State private var shouldFocusEditor = false
@@ -52,7 +66,12 @@ struct EditorCanvasView: View {
     private var centeredEditor: some View {
         HStack(alignment: .top) {
             Spacer(minLength: 0)
-            MarkdownWritingTextView(text: $text, isFocused: $shouldFocusEditor)
+            MarkdownWritingTextView(
+                text: $text,
+                isFocused: $shouldFocusEditor,
+                command: command,
+                onCommandHandled: onCommandHandled
+            )
                 .frame(maxWidth: lineWidth, maxHeight: .infinity)
                 .padding(.top, 24)
                 .padding(.bottom, 22)
@@ -65,6 +84,8 @@ struct EditorCanvasView: View {
 private struct MarkdownWritingTextView: View {
     @Binding var text: String
     @Binding var isFocused: Bool
+    let command: EditorCanvasCommand?
+    let onCommandHandled: (UUID) -> Void
 
     private var layoutProfile: WritingLayoutProfile {
         WritingLayoutProfile.current(for: text)
@@ -117,7 +138,13 @@ private struct MarkdownWritingTextView: View {
                 .stroke(Color.white.opacity(0.55), lineWidth: 0.6)
                 .padding(1.4)
 
-            PlatformMarkdownTextView(text: $text, isFocused: $isFocused, layoutProfile: layoutProfile)
+            PlatformMarkdownTextView(
+                text: $text,
+                isFocused: $isFocused,
+                layoutProfile: layoutProfile,
+                command: command,
+                onCommandHandled: onCommandHandled
+            )
                 .padding(.horizontal, 42)
                 .padding(.vertical, layoutProfile.pageVerticalPadding)
         }
@@ -232,6 +259,8 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
     @Binding var text: String
     @Binding var isFocused: Bool
     let layoutProfile: WritingLayoutProfile
+    let command: EditorCanvasCommand?
+    let onCommandHandled: (UUID) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(text: $text, isFocused: $isFocused)
@@ -259,6 +288,7 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
     func updateUIView(_ textView: UITextView, context: Context) {
         applyLayoutMetrics(to: textView, for: layoutProfile)
         context.coordinator.applyStyledText(on: textView, value: text, force: textView.text != text)
+        context.coordinator.applyCommandIfNeeded(command, on: textView, onCommandHandled: onCommandHandled)
 
         if isFocused, !textView.isFirstResponder {
             textView.becomeFirstResponder()
@@ -280,6 +310,7 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
         @Binding private var isFocused: Bool
         private var isApplyingUpdate = false
         private var lastFocusedParagraphRange: NSRange?
+        private var lastHandledCommandID: UUID?
 
         init(text: Binding<String>, isFocused: Binding<Bool>) {
             _text = text
@@ -384,11 +415,45 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
         }
 
         private func applyCustomEdit(on textView: UITextView, continuation: MarkdownEditorStyler.EnterContinuation) {
-            let updatedText = (textView.text as NSString).replacingCharacters(
-                in: continuation.replacementRange,
-                with: continuation.replacementText
+            let targetRange = NSRange(location: min(continuation.caretLocation, textView.text.utf16.count + continuation.replacementText.utf16.count), length: 0)
+            applyMutation(
+                on: textView,
+                replacementRange: continuation.replacementRange,
+                replacementText: continuation.replacementText,
+                selectedRange: targetRange
             )
-            let targetRange = NSRange(location: min(continuation.caretLocation, updatedText.utf16.count), length: 0)
+        }
+
+        func applyCommandIfNeeded(_ command: EditorCanvasCommand?, on textView: UITextView, onCommandHandled: @escaping (UUID) -> Void) {
+            guard let command, command.id != lastHandledCommandID else {
+                return
+            }
+
+            lastHandledCommandID = command.id
+
+            if let mutation = MarkdownEditorStyler.commandMutation(for: command.action, in: textView.text, selectedRange: textView.selectedRange) {
+                applyMutation(
+                    on: textView,
+                    replacementRange: mutation.replacementRange,
+                    replacementText: mutation.replacementText,
+                    selectedRange: mutation.selectedRange
+                )
+            }
+
+            DispatchQueue.main.async {
+                onCommandHandled(command.id)
+            }
+        }
+
+        private func applyMutation(on textView: UITextView, replacementRange: NSRange, replacementText: String, selectedRange: NSRange) {
+            let updatedText = (textView.text as NSString).replacingCharacters(
+                in: replacementRange,
+                with: replacementText
+            )
+            let targetRange = NSRange(
+                location: min(selectedRange.location, updatedText.utf16.count),
+                length: min(selectedRange.length, max(updatedText.utf16.count - min(selectedRange.location, updatedText.utf16.count), 0))
+            )
             text = updatedText
             applyStyledText(on: textView, value: updatedText, selectedRange: targetRange, force: true)
         }
@@ -399,6 +464,8 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
     @Binding var text: String
     @Binding var isFocused: Bool
     let layoutProfile: WritingLayoutProfile
+    let command: EditorCanvasCommand?
+    let onCommandHandled: (UUID) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(text: $text, isFocused: $isFocused)
@@ -445,6 +512,7 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
 
         applyLayoutMetrics(to: scrollView, textView: textView, for: layoutProfile)
         context.coordinator.applyStyledText(on: textView, value: text, force: textView.string != text)
+        context.coordinator.applyCommandIfNeeded(command, on: textView, onCommandHandled: onCommandHandled)
 
         if isFocused, textView.window?.firstResponder !== textView {
             textView.window?.makeFirstResponder(textView)
@@ -466,6 +534,7 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
         @Binding private var isFocused: Bool
         private var isApplyingUpdate = false
         private var lastFocusedParagraphRange: NSRange?
+        private var lastHandledCommandID: UUID?
 
         init(text: Binding<String>, isFocused: Binding<Bool>) {
             _text = text
@@ -595,11 +664,42 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
         }
 
         private func applyCustomEdit(on textView: NSTextView, continuation: MarkdownEditorStyler.EnterContinuation) {
-            let updatedText = (textView.string as NSString).replacingCharacters(
-                in: continuation.replacementRange,
-                with: continuation.replacementText
+            let targetRange = NSRange(location: min(continuation.caretLocation, textView.string.utf16.count + continuation.replacementText.utf16.count), length: 0)
+            applyMutation(
+                on: textView,
+                replacementRange: continuation.replacementRange,
+                replacementText: continuation.replacementText,
+                selectedRange: targetRange
             )
-            let targetRange = NSRange(location: min(continuation.caretLocation, updatedText.utf16.count), length: 0)
+        }
+
+        func applyCommandIfNeeded(_ command: EditorCanvasCommand?, on textView: NSTextView, onCommandHandled: @escaping (UUID) -> Void) {
+            guard let command, command.id != lastHandledCommandID else {
+                return
+            }
+
+            lastHandledCommandID = command.id
+
+            if let mutation = MarkdownEditorStyler.commandMutation(for: command.action, in: textView.string, selectedRange: textView.selectedRange()) {
+                applyMutation(
+                    on: textView,
+                    replacementRange: mutation.replacementRange,
+                    replacementText: mutation.replacementText,
+                    selectedRange: mutation.selectedRange
+                )
+            }
+
+            DispatchQueue.main.async {
+                onCommandHandled(command.id)
+            }
+        }
+
+        private func applyMutation(on textView: NSTextView, replacementRange: NSRange, replacementText: String, selectedRange: NSRange) {
+            let updatedText = (textView.string as NSString).replacingCharacters(
+                in: replacementRange,
+                with: replacementText
+            )
+            let targetRange = MarkdownEditorStyler.clamped(selectedRange, maxLength: updatedText.utf16.count)
             text = updatedText
             applyStyledText(on: textView, value: updatedText, selectedRange: targetRange, force: true)
         }
@@ -612,6 +712,12 @@ private enum MarkdownEditorStyler {
         let replacementRange: NSRange
         let replacementText: String
         let caretLocation: Int
+    }
+
+    struct CommandMutation {
+        let replacementRange: NSRange
+        let replacementText: String
+        let selectedRange: NSRange
     }
 
     private struct ActiveLineContext {
@@ -818,6 +924,22 @@ private enum MarkdownEditorStyler {
             return continuation
         default:
             return nil
+        }
+    }
+
+    static func commandMutation(for action: EditorCanvasCommand.Action, in text: String, selectedRange: NSRange) -> CommandMutation? {
+        let nsText = text as NSString
+        let clampedRange = clamped(selectedRange, maxLength: nsText.length)
+
+        switch action {
+        case .bold:
+            return inlineWrapMutation(in: nsText, selectedRange: clampedRange, wrapper: "**")
+        case .italic:
+            return inlineWrapMutation(in: nsText, selectedRange: clampedRange, wrapper: "*")
+        case .inlineCode:
+            return inlineWrapMutation(in: nsText, selectedRange: clampedRange, wrapper: "`")
+        case .link:
+            return linkMutation(in: nsText, selectedRange: clampedRange)
         }
     }
 
@@ -1839,6 +1961,53 @@ private enum MarkdownEditorStyler {
         }
         let content = trimmed.dropFirst(markerCount).drop { $0 == " " }
         return content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    fileprivate static func clamped(_ range: NSRange, maxLength: Int) -> NSRange {
+        let location = min(max(range.location, 0), maxLength)
+        let length = min(max(range.length, 0), max(maxLength - location, 0))
+        return NSRange(location: location, length: length)
+    }
+
+    private static func inlineWrapMutation(in text: NSString, selectedRange: NSRange, wrapper: String) -> CommandMutation {
+        let wrapperLength = (wrapper as NSString).length
+        let selected = text.substring(with: selectedRange)
+
+        if selectedRange.length == 0 {
+            return .init(
+                replacementRange: selectedRange,
+                replacementText: wrapper + wrapper,
+                selectedRange: NSRange(location: selectedRange.location + wrapperLength, length: 0)
+            )
+        }
+
+        return .init(
+            replacementRange: selectedRange,
+            replacementText: wrapper + selected + wrapper,
+            selectedRange: NSRange(location: selectedRange.location + wrapperLength, length: selectedRange.length)
+        )
+    }
+
+    private static func linkMutation(in text: NSString, selectedRange: NSRange) -> CommandMutation {
+        let placeholderURL = "https://"
+
+        if selectedRange.length == 0 {
+            let placeholderTitle = "link"
+            return .init(
+                replacementRange: selectedRange,
+                replacementText: "[\(placeholderTitle)](\(placeholderURL))",
+                selectedRange: NSRange(location: selectedRange.location + 1, length: (placeholderTitle as NSString).length)
+            )
+        }
+
+        let selected = text.substring(with: selectedRange)
+        let replacementText = "[\(selected)](\(placeholderURL))"
+        let urlLocation = selectedRange.location + 1 + selectedRange.length + 2
+        return .init(
+            replacementRange: selectedRange,
+            replacementText: replacementText,
+            selectedRange: NSRange(location: urlLocation, length: (placeholderURL as NSString).length)
+        )
     }
 
     private static func lineSubstring(in text: String, range: NSRange) -> String {

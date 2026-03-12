@@ -26,6 +26,7 @@ struct EditorRootView: View {
     @State private var lastImportedAsset: ImportedImageAsset?
     @State private var pendingExport: ExportArtifact?
     @State private var isExportingFile = false
+    @State private var pendingCanvasCommand: EditorCanvasCommand?
 
     @EnvironmentObject private var settings: EditorSettingsStore
 
@@ -137,6 +138,38 @@ struct EditorRootView: View {
                     }
                 } label: {
                     menuBarMenuLabel(title: "View", symbol: "text.alignleft", isActive: false)
+                }
+
+                Menu {
+                    Button {
+                        issueCanvasCommand(.bold)
+                    } label: {
+                        Label("Bold", systemImage: "bold")
+                    }
+                    .keyboardShortcut("b", modifiers: .command)
+
+                    Button {
+                        issueCanvasCommand(.italic)
+                    } label: {
+                        Label("Italic", systemImage: "italic")
+                    }
+                    .keyboardShortcut("i", modifiers: .command)
+
+                    Button {
+                        issueCanvasCommand(.inlineCode)
+                    } label: {
+                        Label("Inline Code", systemImage: "chevron.left.forwardslash.chevron.right")
+                    }
+                    .keyboardShortcut("e", modifiers: .command)
+
+                    Button {
+                        issueCanvasCommand(.link)
+                    } label: {
+                        Label("Link", systemImage: "link")
+                    }
+                    .keyboardShortcut("k", modifiers: .command)
+                } label: {
+                    menuBarMenuLabel(title: "Format", symbol: "textformat", isActive: false)
                 }
 
                 Menu {
@@ -416,6 +449,18 @@ struct EditorRootView: View {
         }
     }
 
+    private func issueCanvasCommand(_ action: EditorCanvasCommand.Action) {
+        pendingCanvasCommand = EditorCanvasCommand(action: action)
+    }
+
+    private func handleCanvasCommand(_ commandID: UUID) {
+        guard pendingCanvasCommand?.id == commandID else {
+            return
+        }
+
+        pendingCanvasCommand = nil
+    }
+
     private func export(_ format: ExportFormat) {
         Task {
             do {
@@ -488,7 +533,9 @@ struct EditorRootView: View {
         EditorCanvasView(
             text: $document.text,
             lineWidth: settings.lineWidthPreset.width,
-            onDropImageFiles: importImages(from:)
+            command: pendingCanvasCommand,
+            onDropImageFiles: importImages(from:),
+            onCommandHandled: handleCanvasCommand
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .scaleEffect(utilityPanel == nil ? 1 : (forFloatingSidebar ? 0.996 : 0.998), anchor: .center)
