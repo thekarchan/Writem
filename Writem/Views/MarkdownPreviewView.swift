@@ -61,7 +61,7 @@ struct MarkdownPreviewView: View {
         case .list(let marker, let value):
             HStack(alignment: .top, spacing: 10) {
                 Text(marker)
-                    .font(.body.weight(.semibold))
+                    .font(font(size: 17, weight: .semibold))
                     .foregroundStyle(Color.accentColor)
                 inlineMarkdown(value)
             }
@@ -81,7 +81,7 @@ struct MarkdownPreviewView: View {
 
         case .paragraph(let value):
             inlineMarkdown(value)
-                .font(.system(size: 18, weight: .regular, design: .serif))
+                .font(font(size: 18, weight: .regular))
                 .foregroundStyle(Color(red: 0.18, green: 0.15, blue: 0.12))
                 .textSelection(.enabled)
         }
@@ -164,7 +164,7 @@ struct MarkdownPreviewView: View {
 
     private func tableCell(_ value: String, weight: Font.Weight = .regular, background: Color, alignment: MarkdownTable.ColumnAlignment) -> some View {
         Text(value.isEmpty ? " " : value)
-            .font(.system(size: 15, weight: weight, design: .serif))
+            .font(font(size: 15, weight: weight))
             .frame(width: 180, alignment: frameAlignment(for: alignment))
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
@@ -215,17 +215,28 @@ struct MarkdownPreviewView: View {
     private func font(for level: Int) -> Font {
         switch level {
         case 1:
-            return .system(size: 34, weight: .bold, design: .serif)
+            return font(size: 34, weight: .bold)
         case 2:
-            return .system(size: 28, weight: .bold, design: .serif)
+            return font(size: 28, weight: .bold)
         case 3:
-            return .system(size: 24, weight: .semibold, design: .serif)
+            return font(size: 24, weight: .semibold)
         case 4:
-            return .system(size: 21, weight: .semibold, design: .serif)
+            return font(size: 21, weight: .semibold)
         case 5:
-            return .system(size: 19, weight: .semibold, design: .serif)
+            return font(size: 19, weight: .semibold)
         default:
-            return .system(size: 17, weight: .semibold, design: .serif)
+            return font(size: 17, weight: .semibold)
+        }
+    }
+
+    private func font(size: CGFloat, weight: Font.Weight) -> Font {
+        switch settings.editorFontStyle {
+        case .system:
+            return .system(size: size, weight: weight)
+        case .serif:
+            return .system(size: size, weight: weight, design: .serif)
+        case .rounded:
+            return .system(size: size, weight: weight, design: .rounded)
         }
     }
 

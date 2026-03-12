@@ -19,6 +19,7 @@ struct WritemApp: App {
         .commands {
             #if os(macOS)
             EditorFileCommands(session: session)
+            EditorEditCommands(settings: settings)
             EditorViewCommands(settings: settings)
             EditorHelpCommands()
             #endif
@@ -150,6 +151,35 @@ private struct EditorViewCommands: Commands {
 
     @ViewBuilder
     private func themeMenuLabel(title: String, isSelected: Bool) -> some View {
+        if isSelected {
+            Label(title, systemImage: "checkmark")
+        } else {
+            Text(title)
+        }
+    }
+}
+
+private struct EditorEditCommands: Commands {
+    @ObservedObject var settings: EditorSettingsStore
+
+    var body: some Commands {
+        CommandGroup(after: .textEditing) {
+            Divider()
+
+            Menu("Font") {
+                ForEach(EditorFontStyle.allCases) { fontStyle in
+                    Button {
+                        settings.editorFontStyle = fontStyle
+                    } label: {
+                        fontMenuLabel(title: fontStyle.title, isSelected: settings.editorFontStyle == fontStyle)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func fontMenuLabel(title: String, isSelected: Bool) -> some View {
         if isSelected {
             Label(title, systemImage: "checkmark")
         } else {

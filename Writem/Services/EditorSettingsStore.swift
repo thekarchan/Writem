@@ -32,6 +32,25 @@ enum EditorTheme: String, CaseIterable, Identifiable {
     }
 }
 
+enum EditorFontStyle: String, CaseIterable, Identifiable {
+    case system
+    case serif
+    case rounded
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .system:
+            return "System"
+        case .serif:
+            return "Serif"
+        case .rounded:
+            return "Rounded"
+        }
+    }
+}
+
 enum ICloudSyncStatus: Equatable {
     case checking
     case available(URL?)
@@ -67,6 +86,7 @@ enum ICloudSyncStatus: Equatable {
 final class EditorSettingsStore: ObservableObject {
     @Published var lineWidthPreset: LineWidthPreset
     @Published var preferredTheme: EditorTheme
+    @Published var editorFontStyle: EditorFontStyle
     @Published var showToolbar: Bool
     @Published var autoThemeEnabled: Bool
     @Published var showCodeLineNumbers: Bool
@@ -81,6 +101,7 @@ final class EditorSettingsStore: ObservableObject {
     private enum Key {
         static let lineWidthPreset = "editor.lineWidthPreset"
         static let preferredTheme = "editor.preferredTheme"
+        static let editorFontStyle = "editor.editorFontStyle"
         static let showToolbar = "editor.showToolbar"
         static let autoThemeEnabled = "editor.autoThemeEnabled"
         static let showCodeLineNumbers = "editor.showCodeLineNumbers"
@@ -95,6 +116,7 @@ final class EditorSettingsStore: ObservableObject {
         self.cloudStore = cloudStore
         self.lineWidthPreset = LineWidthPreset(rawValue: defaults.string(forKey: Key.lineWidthPreset) ?? "") ?? .comfortable
         self.preferredTheme = EditorTheme(rawValue: defaults.string(forKey: Key.preferredTheme) ?? "") ?? .light
+        self.editorFontStyle = EditorFontStyle(rawValue: defaults.string(forKey: Key.editorFontStyle) ?? "") ?? .system
         self.showToolbar = defaults.object(forKey: Key.showToolbar) as? Bool ?? false
         self.autoThemeEnabled = defaults.object(forKey: Key.autoThemeEnabled) as? Bool ?? true
         self.showCodeLineNumbers = defaults.object(forKey: Key.showCodeLineNumbers) as? Bool ?? true
@@ -160,6 +182,11 @@ final class EditorSettingsStore: ObservableObject {
             .sink { [weak self] _ in self?.persist() }
             .store(in: &cancellables)
 
+        $editorFontStyle
+            .dropFirst()
+            .sink { [weak self] _ in self?.persist() }
+            .store(in: &cancellables)
+
         $showToolbar
             .dropFirst()
             .sink { [weak self] _ in self?.persist() }
@@ -192,6 +219,7 @@ final class EditorSettingsStore: ObservableObject {
 
         defaults.set(lineWidthPreset.rawValue, forKey: Key.lineWidthPreset)
         defaults.set(preferredTheme.rawValue, forKey: Key.preferredTheme)
+        defaults.set(editorFontStyle.rawValue, forKey: Key.editorFontStyle)
         defaults.set(showToolbar, forKey: Key.showToolbar)
         defaults.set(autoThemeEnabled, forKey: Key.autoThemeEnabled)
         defaults.set(showCodeLineNumbers, forKey: Key.showCodeLineNumbers)
@@ -203,6 +231,7 @@ final class EditorSettingsStore: ObservableObject {
 
         cloudStore.set(lineWidthPreset.rawValue, forKey: Key.lineWidthPreset)
         cloudStore.set(preferredTheme.rawValue, forKey: Key.preferredTheme)
+        cloudStore.set(editorFontStyle.rawValue, forKey: Key.editorFontStyle)
         cloudStore.set(showToolbar, forKey: Key.showToolbar)
         cloudStore.set(autoThemeEnabled, forKey: Key.autoThemeEnabled)
         cloudStore.set(showCodeLineNumbers, forKey: Key.showCodeLineNumbers)
@@ -226,6 +255,11 @@ final class EditorSettingsStore: ObservableObject {
         if let raw = cloudStore.string(forKey: Key.preferredTheme),
            let theme = EditorTheme(rawValue: raw) {
             preferredTheme = theme
+        }
+
+        if let raw = cloudStore.string(forKey: Key.editorFontStyle),
+           let fontStyle = EditorFontStyle(rawValue: raw) {
+            editorFontStyle = fontStyle
         }
 
         if cloudStore.object(forKey: Key.showToolbar) != nil {

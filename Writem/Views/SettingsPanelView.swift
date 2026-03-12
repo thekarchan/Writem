@@ -32,6 +32,17 @@ struct SettingsPanelView: View {
                     .pickerStyle(.segmented)
                 }
 
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Font")
+                        .font(.subheadline.weight(.semibold))
+                    Picker("Font", selection: $settings.editorFontStyle) {
+                        ForEach(EditorFontStyle.allCases) { fontStyle in
+                            Text(fontStyle.title).tag(fontStyle)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
                 Toggle("Show line numbers in code blocks", isOn: $settings.showCodeLineNumbers)
 
                 Divider()

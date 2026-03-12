@@ -751,6 +751,7 @@ struct EditorCanvasCommand: Identifiable, Equatable {
 }
 
 struct EditorCanvasView: View {
+    @EnvironmentObject private var settings: EditorSettingsStore
     @Binding var text: String
 
     let lineWidth: CGFloat
@@ -793,6 +794,7 @@ struct EditorCanvasView: View {
     var body: some View {
         MarkdownWritingTextView(
             text: $text,
+            fontStyle: settings.editorFontStyle,
             preferredLineWidth: lineWidth,
             isFocused: $shouldFocusEditor,
             command: activeCommand,
@@ -820,9 +822,13 @@ struct EditorCanvasView: View {
                 isImageDropTarget = isTargeted
             }
             .onAppear {
+                MarkdownEditorStyler.configure(fontStyle: settings.editorFontStyle)
                 DispatchQueue.main.async {
                     shouldFocusEditor = true
                 }
+            }
+            .onChange(of: settings.editorFontStyle) { _, fontStyle in
+                MarkdownEditorStyler.configure(fontStyle: fontStyle)
             }
             .overlay(alignment: .topTrailing) {
                 if isImageDropTarget {
@@ -1106,6 +1112,7 @@ private struct MarkdownWritingTextView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     @Binding var text: String
+    let fontStyle: EditorFontStyle
     let preferredLineWidth: CGFloat
     @Binding var isFocused: Bool
     let command: EditorCanvasCommand?
@@ -1146,6 +1153,7 @@ private struct MarkdownWritingTextView: View {
                 PlatformMarkdownTextView(
                     text: $text,
                     isFocused: $isFocused,
+                    fontStyle: fontStyle,
                     layoutProfile: layoutProfile,
                     horizontalInset: horizontalInset,
                     command: command,
@@ -1593,6 +1601,7 @@ private final class SlashAwareTextView: UITextView {
 private struct PlatformMarkdownTextView: UIViewRepresentable {
     @Binding var text: String
     @Binding var isFocused: Bool
+    let fontStyle: EditorFontStyle
     let layoutProfile: WritingLayoutProfile
     let horizontalInset: CGFloat
     let command: EditorCanvasCommand?
@@ -1621,6 +1630,7 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> UITextView {
+        MarkdownEditorStyler.configure(fontStyle: fontStyle)
         let textView = SlashAwareTextView()
         textView.delegate = context.coordinator
         textView.backgroundColor = .clear
@@ -1636,12 +1646,18 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
         textView.tintColor = MarkdownEditorStyler.accentColor
         textView.typingAttributes = MarkdownEditorStyler.baseTypingAttributes
         context.coordinator.applyStyledText(on: textView, value: text, force: true)
+        context.coordinator.lastAppliedFontStyle = fontStyle
         return textView
     }
 
     func updateUIView(_ textView: UITextView, context: Context) {
         applyLayoutMetrics(to: textView, for: layoutProfile)
-        context.coordinator.applyStyledText(on: textView, value: text, force: textView.text != text)
+        let fontDidChange = context.coordinator.lastAppliedFontStyle != fontStyle
+        if fontDidChange {
+            MarkdownEditorStyler.configure(fontStyle: fontStyle)
+        }
+        context.coordinator.applyStyledText(on: textView, value: text, force: fontDidChange || textView.text != text)
+        context.coordinator.lastAppliedFontStyle = fontStyle
         context.coordinator.applyCommandIfNeeded(command, on: textView, onCommandHandled: onCommandHandled)
         if let textView = textView as? SlashAwareTextView {
             textView.slashPaletteEnabled = slashContext != nil
@@ -1688,7 +1704,7 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
         private var isApplyingUpdate = false
         private var lastFocusedParagraphRange: NSRange?
         private var lastHandledCommandID: UUID?
-        private var pendingStyleWorkItem: DispatchWorkItem?
+        var lastAppliedFontStyle: EditorFontStyle?
         private var pendingStyleWorkItem: DispatchWorkItem?
 
         init(
@@ -1975,6 +1991,7 @@ private final class SlashAwareNSTextView: NSTextView {
 private struct PlatformMarkdownTextView: NSViewRepresentable {
     @Binding var text: String
     @Binding var isFocused: Bool
+    let fontStyle: EditorFontStyle
     let layoutProfile: WritingLayoutProfile
     let horizontalInset: CGFloat
     let command: EditorCanvasCommand?
@@ -2003,6 +2020,7 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> NSScrollView {
+        MarkdownEditorStyler.configure(fontStyle: fontStyle)
         let scrollView = NSScrollView()
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = false
@@ -2033,6 +2051,7 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
         scrollView.documentView = textView
         applyLayoutMetrics(to: scrollView, textView: textView, for: layoutProfile)
         context.coordinator.applyStyledText(on: textView, value: text, force: true)
+        context.coordinator.lastAppliedFontStyle = fontStyle
         return scrollView
     }
 
@@ -2042,7 +2061,12 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
         }
 
         applyLayoutMetrics(to: scrollView, textView: textView, for: layoutProfile)
-        context.coordinator.applyStyledText(on: textView, value: text, force: textView.string != text)
+        let fontDidChange = context.coordinator.lastAppliedFontStyle != fontStyle
+        if fontDidChange {
+            MarkdownEditorStyler.configure(fontStyle: fontStyle)
+        }
+        context.coordinator.applyStyledText(on: textView, value: text, force: fontDidChange || textView.string != text)
+        context.coordinator.lastAppliedFontStyle = fontStyle
         context.coordinator.applyCommandIfNeeded(command, on: textView, onCommandHandled: onCommandHandled)
         if let textView = textView as? SlashAwareNSTextView {
             textView.slashPaletteEnabled = slashContext != nil
@@ -2084,6 +2108,7 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
         private var isApplyingUpdate = false
         private var lastFocusedParagraphRange: NSRange?
         private var lastHandledCommandID: UUID?
+        var lastAppliedFontStyle: EditorFontStyle?
         private var pendingStyleWorkItem: DispatchWorkItem?
 
         init(
@@ -2357,6 +2382,12 @@ private enum MarkdownEditorStyler {
         let replacementRange: NSRange
         let replacementText: String
         let selectedRange: NSRange
+    }
+
+    private static var fontStyle: EditorFontStyle = .system
+
+    static func configure(fontStyle: EditorFontStyle) {
+        self.fontStyle = fontStyle
     }
 
     private struct ActiveLineContext {
@@ -4264,19 +4295,42 @@ private enum MarkdownEditorStyler {
     private static func readingFont(size: CGFloat, weight: PlatformWeight) -> PlatformFont {
         #if canImport(AppKit)
         let base = NSFont.systemFont(ofSize: size, weight: weight)
-        if let descriptor = base.fontDescriptor.withDesign(.serif),
-           let font = NSFont(descriptor: descriptor, size: size) {
-            return font
+        guard let descriptor = descriptor(for: base.fontDescriptor) else {
+            return base
         }
-        return base
+        return NSFont(descriptor: descriptor, size: size) ?? base
         #else
         let base = UIFont.systemFont(ofSize: size, weight: weight)
-        if let descriptor = base.fontDescriptor.withDesign(.serif) {
-            return UIFont(descriptor: descriptor, size: size)
+        guard let descriptor = descriptor(for: base.fontDescriptor) else {
+            return base
         }
-        return base
+        return UIFont(descriptor: descriptor, size: size)
         #endif
     }
+
+    #if canImport(AppKit)
+    private static func descriptor(for descriptor: NSFontDescriptor) -> NSFontDescriptor? {
+        switch fontStyle {
+        case .system:
+            return nil
+        case .serif:
+            return descriptor.withDesign(.serif)
+        case .rounded:
+            return descriptor.withDesign(.rounded)
+        }
+    }
+    #else
+    private static func descriptor(for descriptor: UIFontDescriptor) -> UIFontDescriptor? {
+        switch fontStyle {
+        case .system:
+            return nil
+        case .serif:
+            return descriptor.withDesign(.serif)
+        case .rounded:
+            return descriptor.withDesign(.rounded)
+        }
+    }
+    #endif
 
     private static func platformColor(red: CGFloat, green: CGFloat, blue: CGFloat, alpha: CGFloat) -> PlatformColor {
         #if canImport(AppKit)
