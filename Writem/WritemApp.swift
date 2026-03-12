@@ -1,5 +1,9 @@
 import SwiftUI
 
+#if os(macOS)
+import AppKit
+#endif
+
 @main
 struct WritemApp: App {
     @StateObject private var settings = EditorSettingsStore()
@@ -35,48 +39,64 @@ private struct EditorFileCommands: Commands {
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
-            Button("New Draft") {
-                session.requestNewDraft()
+            Menu("Draft") {
+                Button("New Draft") {
+                    session.requestNewDraft()
+                }
+                .keyboardShortcut("n", modifiers: .command)
             }
-            .keyboardShortcut("n", modifiers: .command)
         }
 
         CommandGroup(after: .newItem) {
-            Button("Open...") {
-                session.requestOpenDocument()
-            }
-            .keyboardShortcut("o", modifiers: .command)
+            Menu("Open") {
+                Button("Open...") {
+                    session.requestOpenDocument()
+                }
+                .keyboardShortcut("o", modifiers: .command)
 
-            Menu("Open Recent") {
-                if session.recentDocuments.isEmpty {
-                    Button("No Recent Documents") {}
-                        .disabled(true)
-                } else {
-                    ForEach(session.recentDocuments) { item in
-                        Button(item.menuTitle) {
-                            session.requestOpenRecentDocument(item)
+                Divider()
+
+                Menu("Open Recent") {
+                    if session.recentDocuments.isEmpty {
+                        Button("No Recent Documents") {}
+                            .disabled(true)
+                    } else {
+                        ForEach(session.recentDocuments) { item in
+                            Button(item.menuTitle) {
+                                session.requestOpenRecentDocument(item)
+                            }
                         }
-                    }
 
-                    Divider()
+                        Divider()
 
-                    Button("Clear Menu") {
-                        session.clearRecentDocuments()
+                        Button("Clear Menu") {
+                            session.clearRecentDocuments()
+                        }
                     }
                 }
             }
         }
 
         CommandGroup(replacing: .saveItem) {
-            Button(session.fileURL == nil ? "Save..." : "Save") {
-                session.requestSave(forceSaveAs: false)
-            }
-            .keyboardShortcut("s", modifiers: .command)
+            Menu("Save") {
+                Button(session.fileURL == nil ? "Save..." : "Save") {
+                    session.requestSave(forceSaveAs: false)
+                }
+                .keyboardShortcut("s", modifiers: .command)
 
-            Button("Save As...") {
-                session.requestSave(forceSaveAs: true)
+                Button("Save As...") {
+                    session.requestSave(forceSaveAs: true)
+                }
+                .keyboardShortcut("S", modifiers: [.command, .shift])
+
+                Divider()
+
+                Button("Reveal in Finder") {
+                    guard let fileURL = session.fileURL else { return }
+                    NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+                }
+                .disabled(session.fileURL == nil)
             }
-            .keyboardShortcut("S", modifiers: [.command, .shift])
         }
     }
 }
