@@ -213,6 +213,19 @@ private enum SlashCommandKeyboardAction {
     case dismiss
 }
 
+private enum SlashPaletteShortcut {
+    static func index(for replacementText: String?) -> Int? {
+        guard let replacementText,
+              replacementText.count == 1,
+              let value = Int(replacementText),
+              (1...9).contains(value) else {
+            return nil
+        }
+
+        return value - 1
+    }
+}
+
 struct EditorCanvasCommand: Identifiable, Equatable {
     enum Action: Equatable {
         case bold
@@ -310,6 +323,7 @@ struct EditorCanvasView: View {
                 expandedSlashCommand: expandedSlashCommand,
                 onSelectSlashCommand: issueSlashCommand,
                 onSelectSlashTemplate: issueSlashTemplate,
+                onSelectSlashQuickIndex: selectSlashQuickIndex,
                 onSubmitSlashSelection: submitSlashSelection,
                 onExpandActiveSlashCommand: { expandSlashTemplates(for: activeSlashCommand) },
                 onExpandSpecificSlashCommand: { expandSlashTemplates(for: $0) },
@@ -376,6 +390,27 @@ struct EditorCanvasView: View {
             dismissSlashPalette()
             onRequestImageImport(context.replacementRange)
         }
+    }
+
+    private func selectSlashQuickIndex(_ index: Int) {
+        guard let slashContext, index >= 0 else {
+            return
+        }
+
+        if expandedSlashCommand != nil {
+            guard index < visibleSlashTemplates.count else {
+                return
+            }
+
+            issueSlashTemplate(visibleSlashTemplates[index], context: slashContext)
+            return
+        }
+
+        guard index < visibleSlashCommands.count else {
+            return
+        }
+
+        issueSlashCommand(visibleSlashCommands[index], context: slashContext)
     }
 
     private func moveSlashSelection(by delta: Int) {
@@ -513,6 +548,7 @@ private struct MarkdownWritingTextView: View {
     let expandedSlashCommand: EditorSlashCommand?
     let onSelectSlashCommand: (EditorSlashCommand, SlashCommandContext) -> Void
     let onSelectSlashTemplate: (EditorSlashTemplate, SlashCommandContext) -> Void
+    let onSelectSlashQuickIndex: (Int) -> Void
     let onSubmitSlashSelection: () -> Void
     let onExpandActiveSlashCommand: () -> Void
     let onExpandSpecificSlashCommand: (EditorSlashCommand) -> Void
@@ -579,6 +615,7 @@ private struct MarkdownWritingTextView: View {
                 onCommandHandled: onCommandHandled,
                 slashContext: $slashContext,
                 onMoveSlashSelection: onMoveSlashSelection,
+                onSelectSlashQuickIndex: onSelectSlashQuickIndex,
                 onSubmitSlashSelection: onSubmitSlashSelection,
                 onExpandSlashTemplates: onExpandActiveSlashCommand,
                 onCollapseSlashTemplates: onCollapseSlashTemplates,
@@ -796,7 +833,7 @@ private struct SlashCommandPaletteView: View {
                 .padding(.vertical, 8)
         } else {
             VStack(alignment: .leading, spacing: 2) {
-                ForEach(commands) { command in
+                ForEach(Array(commands.enumerated()), id: \.element.id) { index, command in
                     HStack(spacing: 6) {
                         Button {
                             onSelectCommand(command)
@@ -817,6 +854,8 @@ private struct SlashCommandPaletteView: View {
                                 }
 
                                 Spacer(minLength: 0)
+
+                                shortcutBadge(index: index)
                             }
                             .padding(.horizontal, 10)
                             .padding(.vertical, 7)
@@ -858,7 +897,7 @@ private struct SlashCommandPaletteView: View {
                 .padding(.vertical, 8)
         } else {
             VStack(alignment: .leading, spacing: 2) {
-                ForEach(templates) { template in
+                ForEach(Array(templates.enumerated()), id: \.element.id) { index, template in
                     Button {
                         onSelectTemplate(template)
                     } label: {
@@ -878,6 +917,8 @@ private struct SlashCommandPaletteView: View {
                             }
 
                             Spacer(minLength: 0)
+
+                            shortcutBadge(index: index)
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 7)
@@ -894,6 +935,25 @@ private struct SlashCommandPaletteView: View {
                     .buttonStyle(.plain)
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func shortcutBadge(index: Int) -> some View {
+        if index < 9 {
+            Text("\(index + 1)")
+                .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                .foregroundStyle(Color(red: 0.44, green: 0.39, blue: 0.35))
+                .frame(minWidth: 18, minHeight: 18)
+                .padding(.horizontal, 5)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color(red: 0.95, green: 0.93, blue: 0.89))
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(Color(red: 0.6, green: 0.55, blue: 0.49).opacity(0.18), lineWidth: 0.7)
+                }
         }
     }
 }
@@ -953,6 +1013,7 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
     let onCommandHandled: (UUID) -> Void
     @Binding var slashContext: SlashCommandContext?
     let onMoveSlashSelection: (Int) -> Void
+    let onSelectSlashQuickIndex: (Int) -> Void
     let onSubmitSlashSelection: () -> Void
     let onExpandSlashTemplates: () -> Void
     let onCollapseSlashTemplates: () -> Void
@@ -965,6 +1026,7 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
             isFocused: $isFocused,
             slashContext: $slashContext,
             onMoveSlashSelection: onMoveSlashSelection,
+            onSelectSlashQuickIndex: onSelectSlashQuickIndex,
             onSubmitSlashSelection: onSubmitSlashSelection,
             onExpandSlashTemplates: onExpandSlashTemplates,
             onCollapseSlashTemplates: onCollapseSlashTemplates,
@@ -1027,6 +1089,7 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
         @Binding private var isFocused: Bool
         @Binding private var slashContext: SlashCommandContext?
         private let onMoveSlashSelection: (Int) -> Void
+        private let onSelectSlashQuickIndex: (Int) -> Void
         private let onSubmitSlashSelection: () -> Void
         private let onExpandSlashTemplates: () -> Void
         private let onCollapseSlashTemplates: () -> Void
@@ -1040,6 +1103,7 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
             isFocused: Binding<Bool>,
             slashContext: Binding<SlashCommandContext?>,
             onMoveSlashSelection: @escaping (Int) -> Void,
+            onSelectSlashQuickIndex: @escaping (Int) -> Void,
             onSubmitSlashSelection: @escaping () -> Void,
             onExpandSlashTemplates: @escaping () -> Void,
             onCollapseSlashTemplates: @escaping () -> Void,
@@ -1049,6 +1113,7 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
             _isFocused = isFocused
             _slashContext = slashContext
             self.onMoveSlashSelection = onMoveSlashSelection
+            self.onSelectSlashQuickIndex = onSelectSlashQuickIndex
             self.onSubmitSlashSelection = onSubmitSlashSelection
             self.onExpandSlashTemplates = onExpandSlashTemplates
             self.onCollapseSlashTemplates = onCollapseSlashTemplates
@@ -1083,6 +1148,11 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
 
             if replacementText == "\n", slashContext != nil {
                 onSubmitSlashSelection()
+                return false
+            }
+
+            if let shortcutIndex = SlashPaletteShortcut.index(for: replacementText), slashContext != nil {
+                onSelectSlashQuickIndex(shortcutIndex)
                 return false
             }
 
@@ -1300,6 +1370,7 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
     let onCommandHandled: (UUID) -> Void
     @Binding var slashContext: SlashCommandContext?
     let onMoveSlashSelection: (Int) -> Void
+    let onSelectSlashQuickIndex: (Int) -> Void
     let onSubmitSlashSelection: () -> Void
     let onExpandSlashTemplates: () -> Void
     let onCollapseSlashTemplates: () -> Void
@@ -1312,6 +1383,7 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
             isFocused: $isFocused,
             slashContext: $slashContext,
             onMoveSlashSelection: onMoveSlashSelection,
+            onSelectSlashQuickIndex: onSelectSlashQuickIndex,
             onSubmitSlashSelection: onSubmitSlashSelection,
             onExpandSlashTemplates: onExpandSlashTemplates,
             onCollapseSlashTemplates: onCollapseSlashTemplates,
@@ -1393,6 +1465,7 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
         @Binding private var isFocused: Bool
         @Binding private var slashContext: SlashCommandContext?
         private let onMoveSlashSelection: (Int) -> Void
+        private let onSelectSlashQuickIndex: (Int) -> Void
         private let onSubmitSlashSelection: () -> Void
         private let onExpandSlashTemplates: () -> Void
         private let onCollapseSlashTemplates: () -> Void
@@ -1406,6 +1479,7 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
             isFocused: Binding<Bool>,
             slashContext: Binding<SlashCommandContext?>,
             onMoveSlashSelection: @escaping (Int) -> Void,
+            onSelectSlashQuickIndex: @escaping (Int) -> Void,
             onSubmitSlashSelection: @escaping () -> Void,
             onExpandSlashTemplates: @escaping () -> Void,
             onCollapseSlashTemplates: @escaping () -> Void,
@@ -1415,6 +1489,7 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
             _isFocused = isFocused
             _slashContext = slashContext
             self.onMoveSlashSelection = onMoveSlashSelection
+            self.onSelectSlashQuickIndex = onSelectSlashQuickIndex
             self.onSubmitSlashSelection = onSubmitSlashSelection
             self.onExpandSlashTemplates = onExpandSlashTemplates
             self.onCollapseSlashTemplates = onCollapseSlashTemplates
@@ -1446,6 +1521,11 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
 
             if replacementString == "\n", slashContext != nil {
                 onSubmitSlashSelection()
+                return false
+            }
+
+            if let shortcutIndex = SlashPaletteShortcut.index(for: replacementString), slashContext != nil {
+                onSelectSlashQuickIndex(shortcutIndex)
                 return false
             }
 
