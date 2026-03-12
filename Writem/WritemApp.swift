@@ -21,6 +21,7 @@ struct WritemApp: App {
             EditorFileCommands(session: session)
             EditorEditCommands(settings: settings)
             EditorViewCommands(settings: settings)
+            EditorSettingsCommands(settings: settings)
             EditorHelpCommands()
             #endif
         }
@@ -182,6 +183,23 @@ private struct EditorHelpCommands: Commands {
             }
             .keyboardShortcut("/", modifiers: [.command, .shift])
         }
+    }
+}
+
+private struct EditorSettingsCommands: Commands {
+    @ObservedObject var settings: EditorSettingsStore
+
+    var body: some Commands {
+        CommandMenu("Settings") {
+            Toggle("iCloud Sync", isOn: iCloudSyncBinding)
+        }
+    }
+
+    private var iCloudSyncBinding: Binding<Bool> {
+        Binding(
+            get: { settings.iCloudConfigSyncEnabled },
+            set: { settings.iCloudConfigSyncEnabled = $0 }
+        )
     }
 }
 #endif
