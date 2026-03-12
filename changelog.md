@@ -5,6 +5,7 @@ Dates use the local repository commit date.
 
 ## 2026-03-12
 
+- Switch app launch flow to a scratch-based writing session with app-managed open/save
 - Simplify editor chrome with hidden toolbar and auto theme controls
 - Add slash synonyms and natural language template matching
 - Add slash palette match highlighting

@@ -15,29 +15,31 @@ struct EditorRootView: View {
         let message: String
     }
 
-    @Binding var document: MarkdownFileDocument
-    let fileURL: URL?
-
     @State private var columnVisibility: NavigationSplitViewVisibility = .detailOnly
     @State private var frontmatter: Frontmatter = .empty
     @State private var utilityPanel: UtilityPanel?
+    @State private var isImportingDocument = false
     @State private var isImportingImages = false
     @State private var editorAlert: EditorAlertState?
     @State private var lastImportedAsset: ImportedImageAsset?
+    @State private var pendingDocumentSave = MarkdownFileDocument(text: "")
+    @State private var isSavingDocument = false
+    @State private var documentSaveDefaultName = "Untitled"
     @State private var pendingExport: ExportArtifact?
     @State private var isExportingFile = false
     @State private var pendingCanvasCommand: EditorCanvasCommand?
     @State private var pendingImageImportInsertionRange: NSRange?
 
+    @EnvironmentObject private var session: EditorSessionStore
     @EnvironmentObject private var settings: EditorSettingsStore
     @Environment(\.colorScheme) private var colorScheme
 
     private var outline: [OutlineItem] {
-        MarkdownAnalyzer.outline(for: document.text)
+        MarkdownAnalyzer.outline(for: session.text)
     }
 
     private var issues: [PreflightIssue] {
-        MarkdownAnalyzer.preflightIssues(for: document.text, frontmatter: frontmatter, documentURL: fileURL)
+        MarkdownAnalyzer.preflightIssues(for: session.text, frontmatter: frontmatter, documentURL: session.fileURL)
     }
 
     private var errorCount: Int {
@@ -49,7 +51,7 @@ struct EditorRootView: View {
     }
 
     private var wordCount: Int {
-        MarkdownAnalyzer.wordCount(for: document.text)
+        MarkdownAnalyzer.wordCount(for: session.text)
     }
 
     private var currentDocumentTitle: String {
@@ -66,7 +68,7 @@ struct EditorRootView: View {
     }
 
     private var derivedTitleFromFirstLine: String? {
-        guard let firstLine = document.text
+        guard let firstLine = session.text
             .components(separatedBy: .newlines)
             .map({ sanitizedTitle($0) })
             .first(where: { !$0.isEmpty }) else {
@@ -101,8 +103,34 @@ struct EditorRootView: View {
         .onAppear {
             syncFrontmatter()
         }
-        .onChange(of: document.text) { _, _ in
+        .onChange(of: session.text) { _, _ in
             syncFrontmatter()
+        }
+        .onChange(of: session.openRequestID) { _, requestID in
+            guard requestID != nil else { return }
+            session.consumeOpenRequest()
+            isImportingDocument = true
+        }
+        .onChange(of: session.saveRequest?.id) { _, _ in
+            guard let saveRequest = session.saveRequest else { return }
+            session.consumeSaveRequest()
+            handleSaveRequest(saveRequest)
+        }
+        .fileImporter(
+            isPresented: $isImportingDocument,
+            allowedContentTypes: MarkdownFileDocument.readableContentTypes,
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                guard let url = urls.first else { return }
+                openDocument(from: url)
+            case .failure(let error):
+                guard (error as NSError).code != NSUserCancelledError else {
+                    return
+                }
+                editorAlert = .init(title: "Open failed", message: error.localizedDescription)
+            }
         }
         .fileImporter(
             isPresented: $isImportingImages,
@@ -120,6 +148,22 @@ struct EditorRootView: View {
                     return
                 }
                 editorAlert = .init(title: "Image import failed", message: error.localizedDescription)
+            }
+        }
+        .fileExporter(
+            isPresented: $isSavingDocument,
+            document: pendingDocumentSave,
+            contentType: UTType(filenameExtension: "md") ?? .plainText,
+            defaultFilename: documentSaveDefaultName
+        ) { result in
+            switch result {
+            case .success(let url):
+                session.finishSave(at: url)
+            case .failure(let error):
+                guard (error as NSError).code != NSUserCancelledError else {
+                    return
+                }
+                editorAlert = .init(title: "Save failed", message: error.localizedDescription)
             }
         }
         .alert(item: $editorAlert) { alert in
@@ -140,8 +184,50 @@ struct EditorRootView: View {
             }
             pendingExport = nil
         }
+        .toolbar {
+            #if os(iOS)
+            ToolbarItem(placement: .topBarTrailing) {
+                compactControlMenu
+            }
+            #endif
+        }
         .preferredColorScheme(settings.resolvedColorScheme)
     }
+
+    #if os(iOS)
+    private var compactControlMenu: some View {
+        Menu {
+            Button("New Draft") {
+                session.restoreScratchDraft()
+            }
+
+            Button("Open...") {
+                session.requestOpenDocument()
+            }
+
+            Button(session.fileURL == nil ? "Save..." : "Save") {
+                session.requestSave(forceSaveAs: false)
+            }
+
+            Button("Save As...") {
+                session.requestSave(forceSaveAs: true)
+            }
+
+            Divider()
+
+            Toggle(isOn: $settings.showToolbar) {
+                Text(settings.showToolbar ? "Hide Toolbar" : "Show Toolbar")
+            }
+
+            Toggle(isOn: $settings.autoThemeEnabled) {
+                Text("Auto Switch Dark Theme")
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.system(size: 17, weight: .medium))
+        }
+    }
+    #endif
 
     private var header: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -302,7 +388,7 @@ struct EditorRootView: View {
             if let lastImportedAsset {
                 Text(lastImportedAsset.relativePath)
                     .lineLimit(1)
-            } else if fileURL == nil {
+            } else if session.fileURL == nil {
                 Text("Save to enable assets")
             }
         }
@@ -370,13 +456,13 @@ struct EditorRootView: View {
         switch panel {
         case .frontmatter:
             FrontmatterPanelView(frontmatter: $frontmatter) { updated in
-                document.text = FrontmatterParser.merge(updated, into: document.text)
+                session.text = FrontmatterParser.merge(updated, into: session.text)
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 16)
         case .tables:
-            TableEditorPanelView(markdown: document.text) { updatedMarkdown in
-                document.text = updatedMarkdown
+            TableEditorPanelView(markdown: session.text) { updatedMarkdown in
+                session.text = updatedMarkdown
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 16)
@@ -472,7 +558,7 @@ struct EditorRootView: View {
     }
 
     private func syncFrontmatter() {
-        frontmatter = FrontmatterParser.parse(document.text)
+        frontmatter = FrontmatterParser.parse(session.text)
     }
 
     private func toggleUtilityPanel(_ panel: UtilityPanel) {
@@ -488,11 +574,11 @@ struct EditorRootView: View {
     }
 
     private func insert(snippet: Snippet) {
-        let trimmed = document.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = session.text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
-            document.text = snippet.content + "\n"
+            session.text = snippet.content + "\n"
         } else {
-            document.text += "\n\n" + snippet.content
+            session.text += "\n\n" + snippet.content
         }
     }
 
@@ -508,14 +594,46 @@ struct EditorRootView: View {
         pendingCanvasCommand = nil
     }
 
+    private func handleSaveRequest(_ saveRequest: EditorSaveRequest) {
+        if !saveRequest.forceSaveAs, session.fileURL != nil {
+            do {
+                try session.saveToCurrentLocation()
+            } catch {
+                editorAlert = .init(title: "Save failed", message: error.localizedDescription)
+            }
+            return
+        }
+
+        pendingDocumentSave = MarkdownFileDocument(text: session.text)
+        documentSaveDefaultName = session.suggestedFilename
+        isSavingDocument = true
+    }
+
+    private func openDocument(from url: URL) {
+        let didStartAccessing = url.startAccessingSecurityScopedResource()
+        defer {
+            if didStartAccessing {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        do {
+            try session.openDocument(at: url)
+            lastImportedAsset = nil
+            utilityPanel = nil
+        } catch {
+            editorAlert = .init(title: "Open failed", message: error.localizedDescription)
+        }
+    }
+
     private func export(_ format: ExportFormat) {
         Task {
             do {
                 let artifact = try await DocumentExportService.makeArtifact(
                     format: format,
-                    markdown: document.text,
+                    markdown: session.text,
                     frontmatter: frontmatter,
-                    documentURL: fileURL,
+                    documentURL: session.fileURL,
                     showCodeLineNumbers: settings.showCodeLineNumbers
                 )
                 pendingExport = artifact
@@ -535,7 +653,7 @@ struct EditorRootView: View {
         }
 
         do {
-            let importedAssets = try ImageResourceManager.importImages(from: imageURLs, into: fileURL)
+            let importedAssets = try ImageResourceManager.importImages(from: imageURLs, into: session.fileURL)
             guard !importedAssets.isEmpty else {
                 return false
             }
@@ -543,7 +661,7 @@ struct EditorRootView: View {
             let references = importedAssets.map(\.markdownReference)
             if let replacementRange {
                 let replacementText = references.joined(separator: "\n\n")
-                let clampedRange = clamped(replacementRange, maxLength: document.text.utf16.count)
+                let clampedRange = clamped(replacementRange, maxLength: session.text.utf16.count)
                 issueCanvasCommand(
                     .replace(
                         .init(
@@ -554,7 +672,7 @@ struct EditorRootView: View {
                     )
                 )
             } else {
-                document.text = appendedMarkdownReferences(references, to: document.text)
+                session.text = appendedMarkdownReferences(references, to: session.text)
             }
             lastImportedAsset = importedAssets.last
             return true
@@ -579,7 +697,7 @@ struct EditorRootView: View {
     }
 
     private func requestImageImport(at replacementRange: NSRange? = nil) {
-        guard fileURL != nil else {
+        guard session.fileURL != nil else {
             editorAlert = .init(
                 title: "Image import unavailable",
                 message: ImageResourceError.unsavedDocument.localizedDescription
@@ -615,7 +733,7 @@ struct EditorRootView: View {
 
     private func editorCanvas(forFloatingSidebar: Bool) -> some View {
         EditorCanvasView(
-            text: $document.text,
+            text: $session.text,
             lineWidth: settings.lineWidthPreset.width,
             command: pendingCanvasCommand,
             onDropImageFiles: { urls in
