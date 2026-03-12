@@ -1114,6 +1114,8 @@ struct EditorCanvasView: View {
 }
 
 private struct MarkdownWritingTextView: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     @Binding var text: String
     @Binding var isFocused: Bool
     let command: EditorCanvasCommand?
@@ -1144,8 +1146,12 @@ private struct MarkdownWritingTextView: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color(red: 0.58, green: 0.54, blue: 0.48).opacity(0.08),
-                            Color.black.opacity(0.015)
+                            colorScheme == .dark
+                                ? Color.white.opacity(0.035)
+                                : Color(red: 0.58, green: 0.54, blue: 0.48).opacity(0.08),
+                            colorScheme == .dark
+                                ? Color.black.opacity(0.14)
+                                : Color.black.opacity(0.015)
                         ],
                         startPoint: .top,
                         endPoint: .bottom
@@ -1159,11 +1165,19 @@ private struct MarkdownWritingTextView: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color(red: 1.0, green: 0.999, blue: 0.996),
-                            Color(red: 0.993, green: 0.991, blue: 0.985),
+                            colorScheme == .dark
+                                ? Color(red: 0.135, green: 0.14, blue: 0.15)
+                                : Color(red: 1.0, green: 0.999, blue: 0.996),
+                            colorScheme == .dark
+                                ? Color(red: 0.115, green: 0.12, blue: 0.13)
+                                : Color(red: 0.993, green: 0.991, blue: 0.985),
                             layoutProfile.isBlank
-                                ? Color(red: 0.986, green: 0.983, blue: 0.976)
-                                : Color(red: 0.989, green: 0.986, blue: 0.978)
+                                ? (colorScheme == .dark
+                                    ? Color(red: 0.105, green: 0.11, blue: 0.12)
+                                    : Color(red: 0.986, green: 0.983, blue: 0.976))
+                                : (colorScheme == .dark
+                                    ? Color(red: 0.112, green: 0.116, blue: 0.126)
+                                    : Color(red: 0.989, green: 0.986, blue: 0.978))
                         ],
                         startPoint: .top,
                         endPoint: .bottom
@@ -1171,18 +1185,23 @@ private struct MarkdownWritingTextView: View {
                 )
                 .overlay(alignment: .top) {
                     Rectangle()
-                        .fill(Color.white.opacity(0.75))
+                        .fill(colorScheme == .dark ? Color.white.opacity(0.08) : Color.white.opacity(0.75))
                         .frame(height: 1)
                         .padding(.horizontal, 20)
                 }
-                .shadow(color: Color.black.opacity(0.025), radius: 10, x: 0, y: 2)
-                .shadow(color: Color(red: 0.3, green: 0.28, blue: 0.23).opacity(0.08), radius: 22, x: 0, y: 14)
+                .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.26 : 0.025), radius: 10, x: 0, y: 2)
+                .shadow(color: Color(red: 0.3, green: 0.28, blue: 0.23).opacity(colorScheme == .dark ? 0.18 : 0.08), radius: 22, x: 0, y: 14)
 
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(Color(red: 0.58, green: 0.54, blue: 0.48).opacity(0.16), lineWidth: 0.8)
+                .stroke(
+                    colorScheme == .dark
+                        ? Color.white.opacity(0.10)
+                        : Color(red: 0.58, green: 0.54, blue: 0.48).opacity(0.16),
+                    lineWidth: 0.8
+                )
 
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(Color.white.opacity(0.55), lineWidth: 0.6)
+                .stroke(colorScheme == .dark ? Color.white.opacity(0.04) : Color.white.opacity(0.55), lineWidth: 0.6)
                 .padding(1.4)
 
             PlatformMarkdownTextView(
@@ -1247,12 +1266,20 @@ private struct MarkdownWritingTextView: View {
                 LinearGradient(
                     colors: alignment == .top
                         ? [
-                            Color(red: 0.995, green: 0.993, blue: 0.988),
-                            Color(red: 0.995, green: 0.993, blue: 0.988).opacity(0)
+                            colorScheme == .dark
+                                ? Color(red: 0.13, green: 0.135, blue: 0.145)
+                                : Color(red: 0.995, green: 0.993, blue: 0.988),
+                            (colorScheme == .dark
+                                ? Color(red: 0.13, green: 0.135, blue: 0.145)
+                                : Color(red: 0.995, green: 0.993, blue: 0.988)).opacity(0)
                         ]
                         : [
-                            Color(red: 0.995, green: 0.993, blue: 0.988).opacity(0),
-                            Color(red: 0.991, green: 0.988, blue: 0.982)
+                            (colorScheme == .dark
+                                ? Color(red: 0.13, green: 0.135, blue: 0.145)
+                                : Color(red: 0.995, green: 0.993, blue: 0.988)).opacity(0),
+                            colorScheme == .dark
+                                ? Color(red: 0.10, green: 0.105, blue: 0.115)
+                                : Color(red: 0.991, green: 0.988, blue: 0.982)
                         ],
                     startPoint: alignment == .top ? .top : .top,
                     endPoint: alignment == .top ? .bottom : .bottom
@@ -1334,6 +1361,8 @@ private struct WritingLayoutProfile {
 }
 
 private struct SlashCommandPaletteView: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     let commands: [EditorSlashCommand]
     let templates: [EditorSlashTemplate]
     let selectedCommandID: String?
@@ -1345,14 +1374,18 @@ private struct SlashCommandPaletteView: View {
     let onExpandCommand: (EditorSlashCommand) -> Void
     let onCollapse: () -> Void
 
-    private let highlightColor = Color(red: 0.47, green: 0.33, blue: 0.2)
+    private var highlightColor: Color {
+        colorScheme == .dark
+            ? Color(red: 0.93, green: 0.70, blue: 0.57)
+            : Color(red: 0.47, green: 0.33, blue: 0.2)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: expandedCommand == nil ? "command" : "arrow.turn.down.right")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color(red: 0.53, green: 0.47, blue: 0.42))
+                    .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.52) : Color(red: 0.53, green: 0.47, blue: 0.42))
 
                 if let expandedCommand {
                     Button {
@@ -1364,7 +1397,7 @@ private struct SlashCommandPaletteView: View {
                             fontSize: 11.5,
                             baseWeight: .semibold,
                             emphasisWeight: .bold,
-                            baseColor: Color(red: 0.34, green: 0.29, blue: 0.25),
+                            baseColor: colorScheme == .dark ? Color.white.opacity(0.84) : Color(red: 0.34, green: 0.29, blue: 0.25),
                             emphasisColor: highlightColor
                         )
                     }
@@ -1372,11 +1405,11 @@ private struct SlashCommandPaletteView: View {
 
                     Text("Templates")
                         .font(.system(size: 11.5, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.58) : .secondary)
                 } else {
                     Text(query.isEmpty ? "Commands" : "/\(query)")
                         .font(.system(size: 11.5, weight: .semibold))
-                        .foregroundStyle(Color(red: 0.34, green: 0.29, blue: 0.25))
+                        .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.84) : Color(red: 0.34, green: 0.29, blue: 0.25))
                 }
             }
 
@@ -1394,8 +1427,12 @@ private struct SlashCommandPaletteView: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color.white.opacity(0.96),
-                            Color(red: 0.992, green: 0.989, blue: 0.982)
+                            colorScheme == .dark
+                                ? Color(red: 0.13, green: 0.135, blue: 0.145).opacity(0.98)
+                                : Color.white.opacity(0.96),
+                            colorScheme == .dark
+                                ? Color(red: 0.105, green: 0.11, blue: 0.12)
+                                : Color(red: 0.992, green: 0.989, blue: 0.982)
                         ],
                         startPoint: .top,
                         endPoint: .bottom
@@ -1404,10 +1441,15 @@ private struct SlashCommandPaletteView: View {
         )
         .overlay {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color(red: 0.58, green: 0.53, blue: 0.47).opacity(0.14), lineWidth: 0.8)
+                .stroke(
+                    colorScheme == .dark
+                        ? Color.white.opacity(0.08)
+                        : Color(red: 0.58, green: 0.53, blue: 0.47).opacity(0.14),
+                    lineWidth: 0.8
+                )
         }
-        .shadow(color: Color.black.opacity(0.045), radius: 14, x: 0, y: 8)
-        .shadow(color: Color(red: 0.36, green: 0.31, blue: 0.27).opacity(0.08), radius: 28, x: 0, y: 14)
+        .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.28 : 0.045), radius: 14, x: 0, y: 8)
+        .shadow(color: Color(red: 0.36, green: 0.31, blue: 0.27).opacity(colorScheme == .dark ? 0.16 : 0.08), radius: 28, x: 0, y: 14)
     }
 
     @ViewBuilder
@@ -4169,79 +4211,79 @@ private enum MarkdownEditorStyler {
     }
 
     private static var textColor: PlatformColor {
-        platformColor(red: 0.15, green: 0.15, blue: 0.14, alpha: 1)
+        adaptivePlatformColor(light: (0.15, 0.15, 0.14, 1), dark: (0.87, 0.87, 0.85, 1))
     }
 
     private static var mutedColor: PlatformColor {
-        platformColor(red: 0.48, green: 0.48, blue: 0.46, alpha: 1)
+        adaptivePlatformColor(light: (0.48, 0.48, 0.46, 1), dark: (0.62, 0.63, 0.65, 1))
     }
 
     static var faintSyntaxColor: PlatformColor {
-        platformColor(red: 0.79, green: 0.78, blue: 0.75, alpha: 1)
+        adaptivePlatformColor(light: (0.79, 0.78, 0.75, 1), dark: (0.42, 0.44, 0.47, 1))
     }
 
     private static var ghostSyntaxColor: PlatformColor {
-        platformColor(red: 0.84, green: 0.83, blue: 0.80, alpha: 1)
+        adaptivePlatformColor(light: (0.84, 0.83, 0.80, 1), dark: (0.34, 0.36, 0.39, 1))
     }
 
     private static var structuralSyntaxColor: PlatformColor {
-        platformColor(red: 0.54, green: 0.49, blue: 0.45, alpha: 1)
+        adaptivePlatformColor(light: (0.54, 0.49, 0.45, 1), dark: (0.71, 0.67, 0.63, 1))
     }
 
     fileprivate static var accentColor: PlatformColor {
-        platformColor(red: 0.63, green: 0.38, blue: 0.30, alpha: 1)
+        adaptivePlatformColor(light: (0.63, 0.38, 0.30, 1), dark: (0.85, 0.58, 0.46, 1))
     }
 
     private static var quoteColor: PlatformColor {
-        platformColor(red: 0.39, green: 0.41, blue: 0.42, alpha: 1)
+        adaptivePlatformColor(light: (0.39, 0.41, 0.42, 1), dark: (0.75, 0.79, 0.82, 1))
     }
 
     private static var subtleBackground: PlatformColor {
-        platformColor(red: 0.95, green: 0.95, blue: 0.93, alpha: 1)
+        adaptivePlatformColor(light: (0.95, 0.95, 0.93, 1), dark: (0.18, 0.19, 0.20, 1))
     }
 
     private static var frontmatterBackground: PlatformColor {
-        platformColor(red: 0.972, green: 0.969, blue: 0.961, alpha: 1)
+        adaptivePlatformColor(light: (0.972, 0.969, 0.961, 1), dark: (0.15, 0.16, 0.17, 1))
     }
 
     private static var quoteBackground: PlatformColor {
-        platformColor(red: 0.978, green: 0.976, blue: 0.968, alpha: 1)
+        adaptivePlatformColor(light: (0.978, 0.976, 0.968, 1), dark: (0.14, 0.15, 0.16, 1))
     }
 
     private static var tableBackground: PlatformColor {
-        platformColor(red: 0.979, green: 0.977, blue: 0.969, alpha: 1)
+        adaptivePlatformColor(light: (0.979, 0.977, 0.969, 1), dark: (0.145, 0.15, 0.16, 1))
     }
 
     private static var codeBackground: PlatformColor {
-        platformColor(red: 0.958, green: 0.954, blue: 0.946, alpha: 1)
+        adaptivePlatformColor(light: (0.958, 0.954, 0.946, 1), dark: (0.11, 0.12, 0.13, 1))
     }
 
     private static var codeTextColor: PlatformColor {
-        platformColor(red: 0.22, green: 0.23, blue: 0.24, alpha: 1)
+        adaptivePlatformColor(light: (0.22, 0.23, 0.24, 1), dark: (0.88, 0.89, 0.90, 1))
     }
 
     private static var codeInlineColor: PlatformColor {
-        platformColor(red: 0.34, green: 0.23, blue: 0.20, alpha: 1)
+        adaptivePlatformColor(light: (0.34, 0.23, 0.20, 1), dark: (0.93, 0.74, 0.68, 1))
     }
 
     private static var inlineCodeBackground: PlatformColor {
-        platformColor(red: 0.943, green: 0.936, blue: 0.926, alpha: 1)
+        adaptivePlatformColor(light: (0.943, 0.936, 0.926, 1), dark: (0.19, 0.20, 0.22, 1))
     }
 
     private static var linkColor: PlatformColor {
-        platformColor(red: 0.22, green: 0.36, blue: 0.50, alpha: 1)
+        adaptivePlatformColor(light: (0.22, 0.36, 0.50, 1), dark: (0.64, 0.78, 0.92, 1))
     }
 
     private static var linkUnderlineColor: PlatformColor {
-        platformColor(red: 0.48, green: 0.60, blue: 0.70, alpha: 0.45)
+        adaptivePlatformColor(light: (0.48, 0.60, 0.70, 0.45), dark: (0.68, 0.80, 0.92, 0.42))
     }
 
     private static var strongTextColor: PlatformColor {
-        platformColor(red: 0.11, green: 0.11, blue: 0.10, alpha: 1)
+        adaptivePlatformColor(light: (0.11, 0.11, 0.10, 1), dark: (0.96, 0.96, 0.95, 1))
     }
 
     private static var emphasisTextColor: PlatformColor {
-        platformColor(red: 0.25, green: 0.24, blue: 0.22, alpha: 1)
+        adaptivePlatformColor(light: (0.25, 0.24, 0.22, 1), dark: (0.89, 0.88, 0.86, 1))
     }
 
     private static func monoFont(size: CGFloat) -> PlatformFont {
@@ -4296,6 +4338,24 @@ private enum MarkdownEditorStyler {
         return .init(calibratedRed: red, green: green, blue: blue, alpha: alpha)
         #else
         return .init(red: red, green: green, blue: blue, alpha: alpha)
+        #endif
+    }
+
+    private static func adaptivePlatformColor(
+        light: (CGFloat, CGFloat, CGFloat, CGFloat),
+        dark: (CGFloat, CGFloat, CGFloat, CGFloat)
+    ) -> PlatformColor {
+        #if canImport(AppKit)
+        return PlatformColor(name: nil) { appearance in
+            let best = appearance.bestMatch(from: [.darkAqua, .aqua])
+            let components = best == .darkAqua ? dark : light
+            return platformColor(red: components.0, green: components.1, blue: components.2, alpha: components.3)
+        }
+        #else
+        return PlatformColor { traits in
+            let components = traits.userInterfaceStyle == .dark ? dark : light
+            return platformColor(red: components.0, green: components.1, blue: components.2, alpha: components.3)
+        }
         #endif
     }
 

@@ -5,6 +5,7 @@ Dates use the local repository commit date.
 
 ## 2026-03-12
 
+- Simplify editor chrome with hidden toolbar and auto theme controls
 - Add slash synonyms and natural language template matching
 - Add slash palette match highlighting
 - Add fuzzy slash matching and recent usage sorting

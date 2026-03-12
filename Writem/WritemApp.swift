@@ -10,6 +10,11 @@ struct WritemApp: App {
             EditorRootView(document: file.$document, fileURL: file.fileURL)
                 .environmentObject(settings)
         }
+        .commands {
+            #if os(macOS)
+            EditorEditCommands(settings: settings)
+            #endif
+        }
 
         #if os(iOS)
         if #available(iOS 18.0, *) {
@@ -44,6 +49,52 @@ struct WritemApp: App {
         #endif
     }
 }
+
+#if os(macOS)
+private struct EditorEditCommands: Commands {
+    @ObservedObject var settings: EditorSettingsStore
+
+    var body: some Commands {
+        CommandGroup(after: .textEditing) {
+            Divider()
+
+            Toggle(settings.showToolbar ? "Hide Toolbar" : "Show Toolbar", isOn: toolbarBinding)
+
+            Toggle("Auto Switch Dark Theme", isOn: autoThemeBinding)
+
+            if !settings.autoThemeEnabled {
+                Picker("Theme", selection: themeBinding) {
+                    Text("Light").tag(EditorTheme.light)
+                    Text("Dark").tag(EditorTheme.dark)
+                }
+            }
+        }
+    }
+
+    private var toolbarBinding: Binding<Bool> {
+        Binding(
+            get: { settings.showToolbar },
+            set: { settings.showToolbar = $0 }
+        )
+    }
+
+    private var autoThemeBinding: Binding<Bool> {
+        Binding(
+            get: { settings.autoThemeEnabled },
+            set: { settings.autoThemeEnabled = $0 }
+        )
+    }
+
+    private var themeBinding: Binding<EditorTheme> {
+        Binding(
+            get: {
+                settings.preferredTheme == .system ? .light : settings.preferredTheme
+            },
+            set: { settings.preferredTheme = $0 }
+        )
+    }
+}
+#endif
 
 #if os(iOS)
 @available(iOS 18.0, *)

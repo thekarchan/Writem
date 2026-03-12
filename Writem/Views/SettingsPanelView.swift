@@ -6,15 +6,19 @@ struct SettingsPanelView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
+                Toggle("Show toolbar", isOn: $settings.showToolbar)
+
                 VStack(alignment: .leading, spacing: 10) {
+                    Toggle("Auto switch dark theme", isOn: $settings.autoThemeEnabled)
                     Text("Theme")
                         .font(.subheadline.weight(.semibold))
                     Picker("Theme", selection: $settings.preferredTheme) {
-                        ForEach(EditorTheme.allCases) { theme in
+                        ForEach(EditorTheme.allCases.filter { $0 != .system }) { theme in
                             Text(theme.title).tag(theme)
                         }
                     }
                     .pickerStyle(.segmented)
+                    .disabled(settings.autoThemeEnabled)
                 }
 
                 VStack(alignment: .leading, spacing: 10) {

@@ -30,6 +30,7 @@ struct EditorRootView: View {
     @State private var pendingImageImportInsertionRange: NSRange?
 
     @EnvironmentObject private var settings: EditorSettingsStore
+    @Environment(\.colorScheme) private var colorScheme
 
     private var outline: [OutlineItem] {
         MarkdownAnalyzer.outline(for: document.text)
@@ -51,6 +52,30 @@ struct EditorRootView: View {
         MarkdownAnalyzer.wordCount(for: document.text)
     }
 
+    private var currentDocumentTitle: String {
+        let explicitTitle = sanitizedTitle(frontmatter.title)
+        if !explicitTitle.isEmpty {
+            return explicitTitle
+        }
+
+        if let derivedTitle = derivedTitleFromFirstLine {
+            return derivedTitle
+        }
+
+        return "Writem"
+    }
+
+    private var derivedTitleFromFirstLine: String? {
+        guard let firstLine = document.text
+            .components(separatedBy: .newlines)
+            .map({ sanitizedTitle($0) })
+            .first(where: { !$0.isEmpty }) else {
+            return nil
+        }
+
+        return String(firstLine.prefix(16))
+    }
+
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             OutlineSidebarView(items: outline, issues: issues) { _ in
@@ -58,15 +83,19 @@ struct EditorRootView: View {
             }
         } detail: {
             VStack(spacing: 0) {
-                header
+                if settings.showToolbar {
+                    header
+                }
                 GeometryReader { proxy in
                     editorWorkspace(in: proxy.size)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                statusBar
+                if settings.showToolbar {
+                    statusBar
+                }
             }
             .background(editorBackground)
-            .navigationTitle(frontmatter.title.isEmpty ? "Untitled" : frontmatter.title)
+            .navigationTitle(currentDocumentTitle)
         }
         .navigationSplitViewStyle(.balanced)
         .onAppear {
@@ -111,7 +140,7 @@ struct EditorRootView: View {
             }
             pendingExport = nil
         }
-        .preferredColorScheme(settings.preferredTheme.colorScheme)
+        .preferredColorScheme(settings.resolvedColorScheme)
     }
 
     private var header: some View {
@@ -241,7 +270,7 @@ struct EditorRootView: View {
                             .foregroundStyle(Color.secondary.opacity(0.78))
                     }
 
-                    Text(frontmatter.title.isEmpty ? "Untitled" : frontmatter.title)
+                    Text(currentDocumentTitle)
                         .font(.system(size: 12, weight: .medium, design: .serif))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -256,10 +285,10 @@ struct EditorRootView: View {
         }
         .background(
             Rectangle()
-                .fill(Color.white.opacity(0.54))
+                .fill(colorScheme == .dark ? Color.black.opacity(0.18) : Color.white.opacity(0.54))
                 .overlay(alignment: .bottom) {
                     Rectangle()
-                        .fill(Color.black.opacity(0.04))
+                        .fill(colorScheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.04))
                         .frame(height: 1)
                 }
         )
@@ -278,16 +307,16 @@ struct EditorRootView: View {
             }
         }
         .font(.system(size: 11.5, weight: .medium))
-        .foregroundStyle(Color.secondary.opacity(0.82))
+        .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.62) : Color.secondary.opacity(0.82))
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 30)
         .padding(.vertical, 8)
         .background(
             Rectangle()
-                .fill(Color.white.opacity(0.5))
+                .fill(colorScheme == .dark ? Color.black.opacity(0.16) : Color.white.opacity(0.5))
                 .overlay(alignment: .top) {
                     Rectangle()
-                        .fill(Color.black.opacity(0.035))
+                        .fill(colorScheme == .dark ? Color.white.opacity(0.055) : Color.black.opacity(0.035))
                         .frame(height: 1)
                 }
         )
@@ -296,6 +325,8 @@ struct EditorRootView: View {
     @ViewBuilder
     private func editorWorkspace(in size: CGSize) -> some View {
         let usesPinnedSidebar = size.width >= 1080
+        let horizontalPadding = settings.showToolbar ? 18.0 : 10.0
+        let verticalPadding = settings.showToolbar ? 10.0 : 0.0
 
         if usesPinnedSidebar {
             HStack(spacing: 18) {
@@ -309,8 +340,8 @@ struct EditorRootView: View {
                         .zIndex(2)
                 }
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 10)
+            .padding(.horizontal, horizontalPadding)
+            .padding(.vertical, verticalPadding)
             .animation(.spring(response: 0.34, dampingFraction: 0.9), value: utilityPanel)
         } else {
             ZStack(alignment: .topTrailing) {
@@ -401,8 +432,12 @@ struct EditorRootView: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color.white.opacity(0.82),
-                            Color(red: 0.985, green: 0.982, blue: 0.975).opacity(0.96)
+                            colorScheme == .dark
+                                ? Color(red: 0.125, green: 0.13, blue: 0.14).opacity(0.94)
+                                : Color.white.opacity(0.82),
+                            colorScheme == .dark
+                                ? Color(red: 0.10, green: 0.105, blue: 0.115).opacity(0.98)
+                                : Color(red: 0.985, green: 0.982, blue: 0.975).opacity(0.96)
                         ],
                         startPoint: .top,
                         endPoint: .bottom
@@ -411,7 +446,12 @@ struct EditorRootView: View {
         )
         .overlay {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color(red: 0.59, green: 0.54, blue: 0.49).opacity(0.14), lineWidth: 0.9)
+                .stroke(
+                    colorScheme == .dark
+                        ? Color.white.opacity(0.08)
+                        : Color(red: 0.59, green: 0.54, blue: 0.49).opacity(0.14),
+                    lineWidth: 0.9
+                )
         }
         .overlay(alignment: .leading) {
             LinearGradient(
@@ -426,8 +466,8 @@ struct EditorRootView: View {
             .padding(.vertical, 24)
             .allowsHitTesting(false)
         }
-        .shadow(color: Color.black.opacity(0.026), radius: 16, x: 0, y: 6)
-        .shadow(color: Color(red: 0.41, green: 0.36, blue: 0.30).opacity(0.09), radius: 30, x: -6, y: 18)
+        .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.22 : 0.026), radius: 16, x: 0, y: 6)
+        .shadow(color: Color(red: 0.41, green: 0.36, blue: 0.30).opacity(colorScheme == .dark ? 0.18 : 0.09), radius: 30, x: -6, y: 18)
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
@@ -560,8 +600,12 @@ struct EditorRootView: View {
     private var editorBackground: some View {
         LinearGradient(
             colors: [
-                Color(red: 0.975, green: 0.972, blue: 0.965),
-                Color.white
+                colorScheme == .dark
+                    ? Color(red: 0.085, green: 0.09, blue: 0.10)
+                    : Color(red: 0.975, green: 0.972, blue: 0.965),
+                colorScheme == .dark
+                    ? Color(red: 0.055, green: 0.06, blue: 0.07)
+                    : Color.white
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
@@ -687,7 +731,11 @@ struct EditorRootView: View {
     }
 
     private func menuBarForeground(isActive: Bool) -> Color {
-        isActive ? Color(red: 0.33, green: 0.28, blue: 0.25) : Color.secondary
+        if colorScheme == .dark {
+            return isActive ? Color.white.opacity(0.9) : Color.white.opacity(0.68)
+        }
+
+        return isActive ? Color(red: 0.33, green: 0.28, blue: 0.25) : Color.secondary
     }
 
     private func menuBarButton(title: String, symbol: String, isActive: Bool = false, action: @escaping () -> Void) -> some View {
@@ -705,8 +753,21 @@ struct EditorRootView: View {
             .padding(.vertical, 5)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(isActive ? Color.black.opacity(0.05) : Color.clear)
+                    .fill(
+                        isActive
+                            ? (colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05))
+                            : Color.clear
+                    )
             )
         .contentShape(Rectangle())
+    }
+
+    private func sanitizedTitle(_ value: String) -> String {
+        value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: #"^#+\s*"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"\[(.*?)\]\((.*?)\)"#, with: "$1", options: .regularExpression)
+            .replacingOccurrences(of: #"`([^`]*)`"#, with: "$1", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
