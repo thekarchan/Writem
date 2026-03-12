@@ -553,6 +553,9 @@ private enum MarkdownEditorStyler {
             case frontmatter
             case codeBlock
             case heading(level: Int, markerCount: Int, leadingWhitespace: Int)
+            case quote(leadingWhitespace: Int)
+            case unorderedList(markerLength: Int, leadingWhitespace: Int)
+            case orderedList(markerLength: Int, leadingWhitespace: Int)
         }
 
         let kind: Kind
@@ -604,6 +607,19 @@ private enum MarkdownEditorStyler {
                 ]
             }
             return headingTypingAttributes(level: level, isLeadingBlock: lineContext.isLeadingBlock)
+        case let .quote(leadingWhitespace):
+            let cursorOffset = max(selectedRange.location - lineContext.lineRange.location, 0)
+            if cursorOffset <= leadingWhitespace + 1 {
+                return quoteMarkerTypingAttributes
+            }
+            return quoteTypingAttributes
+        case let .unorderedList(markerLength, leadingWhitespace),
+             let .orderedList(markerLength, leadingWhitespace):
+            let cursorOffset = max(selectedRange.location - lineContext.lineRange.location, 0)
+            if cursorOffset <= leadingWhitespace + markerLength {
+                return listMarkerTypingAttributes(markerLength: markerLength, leadingWhitespace: leadingWhitespace)
+            }
+            return listTypingAttributes(markerLength: markerLength, leadingWhitespace: leadingWhitespace)
         case .body:
             return baseTypingAttributes
         }
@@ -859,79 +875,48 @@ private enum MarkdownEditorStyler {
     }
 
     private static func styleQuoteIfNeeded(in attributed: NSMutableAttributedString, line: String, lineRange: NSRange) -> Bool {
-        let trimmed = line.trimmingCharacters(in: .whitespaces)
-        guard trimmed.hasPrefix("> ") else {
+        guard let markerLength = quoteMarkerLength(in: line) else {
             return false
         }
 
         let leadingWhitespace = leadingWhitespaceCount(in: line)
-        let markerRange = NSRange(location: lineRange.location + leadingWhitespace, length: 1)
+        let markerRange = NSRange(location: lineRange.location + leadingWhitespace, length: markerLength)
 
         attributed.addAttributes(
-            [
-                .font: bodyFont,
-                .foregroundColor: quoteColor,
-                .backgroundColor: quoteBackground,
-                .paragraphStyle: paragraphStyle(lineSpacing: 10, paragraphSpacing: 10, paragraphSpacingBefore: 8, firstLineHeadIndent: 30, headIndent: 30, tailIndent: -12)
-            ],
+            quoteTypingAttributes,
             range: lineRange
         )
         attributed.addAttributes(
-            [
-                .foregroundColor: structuralSyntaxColor,
-                .font: monoFont(size: 13)
-            ],
+            quoteMarkerTypingAttributes,
             range: markerRange
         )
         return true
     }
 
     private static func styleListIfNeeded(in attributed: NSMutableAttributedString, line: String, lineRange: NSRange) -> Bool {
-        let trimmed = line.trimmingCharacters(in: .whitespaces)
-        let leadingWhitespace = leadingWhitespaceCount(in: line)
-
-        if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") {
+        if let info = unorderedListMarker(in: line) {
             attributed.addAttributes(
-                [
-                    .font: bodyFont,
-                    .foregroundColor: textColor,
-                    .paragraphStyle: paragraphStyle(lineSpacing: 10, paragraphSpacing: 8, paragraphSpacingBefore: 2, firstLineHeadIndent: 22, headIndent: 22)
-                ],
+                listTypingAttributes(markerLength: info.markerLength, leadingWhitespace: info.leadingWhitespace),
                 range: lineRange
             )
             attributed.addAttributes(
-                [
-                    .foregroundColor: faintSyntaxColor,
-                    .font: monoFont(size: 12)
-                ],
-                range: NSRange(location: lineRange.location + leadingWhitespace, length: 1)
+                listMarkerTypingAttributes(markerLength: info.markerLength, leadingWhitespace: info.leadingWhitespace),
+                range: NSRange(location: lineRange.location + info.leadingWhitespace, length: info.markerLength)
             )
             return true
         }
 
-        guard let regex = try? NSRegularExpression(pattern: #"^\d+\.\s"#) else {
-            return false
-        }
-
-        let searchRange = NSRange(location: 0, length: (trimmed as NSString).length)
-        guard let match = regex.firstMatch(in: trimmed, range: searchRange) else {
+        guard let info = orderedListMarker(in: line) else {
             return false
         }
 
         attributed.addAttributes(
-            [
-                .font: bodyFont,
-                .foregroundColor: textColor,
-                .paragraphStyle: paragraphStyle(lineSpacing: 10, paragraphSpacing: 8, paragraphSpacingBefore: 2, firstLineHeadIndent: 28, headIndent: 28)
-                ],
-                range: lineRange
-            )
+            listTypingAttributes(markerLength: info.markerLength, leadingWhitespace: info.leadingWhitespace),
+            range: lineRange
+        )
         attributed.addAttributes(
-            [
-                .foregroundColor: faintSyntaxColor,
-                .font: monoFont(size: 12)
-            ],
-            range: NSRange(location: lineRange.location + leadingWhitespace, length: match.range.length)
+            listMarkerTypingAttributes(markerLength: info.markerLength, leadingWhitespace: info.leadingWhitespace),
+            range: NSRange(location: lineRange.location + info.leadingWhitespace, length: info.markerLength)
         )
         return true
     }
@@ -1346,6 +1331,45 @@ private enum MarkdownEditorStyler {
                 continue
             }
 
+            if quoteMarkerLength(in: line) != nil {
+                if isTargetLine {
+                    return .init(
+                        kind: .quote(leadingWhitespace: leadingWhitespaceCount(in: line)),
+                        lineRange: lineRange,
+                        isLeadingBlock: isLeadingBlock
+                    )
+                }
+                hasEncounteredMeaningfulBlock = true
+                location = lineBoundaryEnd
+                continue
+            }
+
+            if let info = unorderedListMarker(in: line) {
+                if isTargetLine {
+                    return .init(
+                        kind: .unorderedList(markerLength: info.markerLength, leadingWhitespace: info.leadingWhitespace),
+                        lineRange: lineRange,
+                        isLeadingBlock: isLeadingBlock
+                    )
+                }
+                hasEncounteredMeaningfulBlock = true
+                location = lineBoundaryEnd
+                continue
+            }
+
+            if let info = orderedListMarker(in: line) {
+                if isTargetLine {
+                    return .init(
+                        kind: .orderedList(markerLength: info.markerLength, leadingWhitespace: info.leadingWhitespace),
+                        lineRange: lineRange,
+                        isLeadingBlock: isLeadingBlock
+                    )
+                }
+                hasEncounteredMeaningfulBlock = true
+                location = lineBoundaryEnd
+                continue
+            }
+
             if isTargetLine {
                 return .init(kind: .body, lineRange: lineRange, isLeadingBlock: isLeadingBlock)
             }
@@ -1375,6 +1399,52 @@ private enum MarkdownEditorStyler {
             attributes[.kern] = kern
         }
         return attributes
+    }
+
+    private static var quoteTypingAttributes: [NSAttributedString.Key: Any] {
+        [
+            .font: bodyFont,
+            .foregroundColor: quoteColor,
+            .backgroundColor: quoteBackground,
+            .paragraphStyle: paragraphStyle(lineSpacing: 10, paragraphSpacing: 10, paragraphSpacingBefore: 8, firstLineHeadIndent: 30, headIndent: 30, tailIndent: -12)
+        ]
+    }
+
+    private static var quoteMarkerTypingAttributes: [NSAttributedString.Key: Any] {
+        [
+            .font: monoFont(size: 13),
+            .foregroundColor: structuralSyntaxColor,
+            .backgroundColor: quoteBackground,
+            .paragraphStyle: paragraphStyle(lineSpacing: 10, paragraphSpacing: 10, paragraphSpacingBefore: 8, firstLineHeadIndent: 30, headIndent: 30, tailIndent: -12)
+        ]
+    }
+
+    private static func listMarkerTypingAttributes(markerLength: Int, leadingWhitespace: Int) -> [NSAttributedString.Key: Any] {
+        [
+            .font: monoFont(size: 12),
+            .foregroundColor: faintSyntaxColor,
+            .paragraphStyle: paragraphStyle(
+                lineSpacing: 10,
+                paragraphSpacing: 8,
+                paragraphSpacingBefore: 2,
+                firstLineHeadIndent: listIndent(markerLength: markerLength, leadingWhitespace: leadingWhitespace),
+                headIndent: listIndent(markerLength: markerLength, leadingWhitespace: leadingWhitespace)
+            )
+        ]
+    }
+
+    private static func listTypingAttributes(markerLength: Int, leadingWhitespace: Int) -> [NSAttributedString.Key: Any] {
+        [
+            .font: bodyFont,
+            .foregroundColor: textColor,
+            .paragraphStyle: paragraphStyle(
+                lineSpacing: 10,
+                paragraphSpacing: 8,
+                paragraphSpacingBefore: 2,
+                firstLineHeadIndent: listIndent(markerLength: markerLength, leadingWhitespace: leadingWhitespace),
+                headIndent: listIndent(markerLength: markerLength, leadingWhitespace: leadingWhitespace)
+            )
+        ]
     }
 
     private static func headingFont(level: Int, isDisplayHeading: Bool) -> PlatformFont {
@@ -1507,6 +1577,41 @@ private enum MarkdownEditorStyler {
         }
 
         return markerCount
+    }
+
+    private static func quoteMarkerLength(in line: String) -> Int? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard trimmed.hasPrefix("> ") else {
+            return nil
+        }
+        return 1
+    }
+
+    private static func unorderedListMarker(in line: String) -> (markerLength: Int, leadingWhitespace: Int)? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") else {
+            return nil
+        }
+        return (markerLength: 1, leadingWhitespace: leadingWhitespaceCount(in: line))
+    }
+
+    private static func orderedListMarker(in line: String) -> (markerLength: Int, leadingWhitespace: Int)? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard let regex = try? NSRegularExpression(pattern: #"^\d+\.\s"#) else {
+            return nil
+        }
+
+        let searchRange = NSRange(location: 0, length: (trimmed as NSString).length)
+        guard let match = regex.firstMatch(in: trimmed, range: searchRange) else {
+            return nil
+        }
+
+        return (markerLength: match.range.length, leadingWhitespace: leadingWhitespaceCount(in: line))
+    }
+
+    private static func listIndent(markerLength: Int, leadingWhitespace: Int) -> CGFloat {
+        let baseIndent = CGFloat(leadingWhitespace) * 10
+        return max(baseIndent + CGFloat(markerLength) * 7 + 8, markerLength > 1 ? 28 : 22)
     }
 
     private static func paragraphStyle(
