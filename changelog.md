@@ -5,6 +5,7 @@ Dates use the local repository commit date.
 
 ## 2026-03-12
 
+- Move theme selection into a nested View menu with explicit selection state
 - Move toolbar and auto-theme toggles into the View menu
 - Add a layered-paper app icon set and wire AppIcon into both targets
 - Make the editor start writing from the top-left with minimal blank-page insets
