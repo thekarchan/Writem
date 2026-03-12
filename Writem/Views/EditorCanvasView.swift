@@ -286,24 +286,38 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
             _isFocused = isFocused
         }
 
-        func applyStyledText(on textView: UITextView, value: String, force: Bool) {
+        func applyStyledText(on textView: UITextView, value: String, selectedRange overrideSelectedRange: NSRange? = nil, force: Bool) {
             guard force || textView.attributedText?.string != value else {
                 return
             }
 
-            let selectedRange = textView.selectedRange
+            let selectedRange = overrideSelectedRange ?? textView.selectedRange
             let focusedParagraphRange = MarkdownEditorStyler.focusedParagraphRange(in: value, selectedRange: selectedRange)
             isApplyingUpdate = true
             textView.attributedText = MarkdownEditorStyler.attributedText(for: value, focusedRange: focusedParagraphRange)
             let clampedSelectedRange = NSRange(
-                location: min(selectedRange.location, textView.text.utf16.count),
-                length: min(selectedRange.length, max(textView.text.utf16.count - min(selectedRange.location, textView.text.utf16.count), 0))
+                location: min(selectedRange.location, value.utf16.count),
+                length: min(selectedRange.length, max(value.utf16.count - min(selectedRange.location, value.utf16.count), 0))
             )
             textView.selectedRange = clampedSelectedRange
             textView.typingAttributes = MarkdownEditorStyler.typingAttributes(for: value, selectedRange: clampedSelectedRange)
             keepSelectionComfortablyVisible(in: textView)
             isApplyingUpdate = false
             lastFocusedParagraphRange = focusedParagraphRange
+        }
+
+        func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText: String) -> Bool {
+            guard !isApplyingUpdate else {
+                return true
+            }
+
+            guard replacementText == "\n",
+                  let continuation = MarkdownEditorStyler.enterContinuation(in: textView.text, selectedRange: range) else {
+                return true
+            }
+
+            applyCustomEdit(on: textView, continuation: continuation)
+            return false
         }
 
         func textViewDidChange(_ textView: UITextView) {
@@ -361,6 +375,16 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
             let maxOffsetY = max(textView.contentSize.height - textView.bounds.height + textView.adjustedContentInset.bottom, minOffsetY)
             let targetOffsetY = min(max(caretRect.midY - (textView.bounds.height * layoutProfile.focusHeightRatio), minOffsetY), maxOffsetY)
             textView.setContentOffset(CGPoint(x: textView.contentOffset.x, y: targetOffsetY), animated: false)
+        }
+
+        private func applyCustomEdit(on textView: UITextView, continuation: MarkdownEditorStyler.EnterContinuation) {
+            let updatedText = (textView.text as NSString).replacingCharacters(
+                in: continuation.replacementRange,
+                with: continuation.replacementText
+            )
+            let targetRange = NSRange(location: min(continuation.caretLocation, updatedText.utf16.count), length: 0)
+            text = updatedText
+            applyStyledText(on: textView, value: updatedText, selectedRange: targetRange, force: true)
         }
     }
 }
@@ -442,13 +466,14 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
             _isFocused = isFocused
         }
 
-        func applyStyledText(on textView: NSTextView, value: String, force: Bool) {
+        func applyStyledText(on textView: NSTextView, value: String, selectedRange overrideSelectedRange: NSRange? = nil, force: Bool) {
             guard force || textView.string != value else {
                 return
             }
 
-            let selectedRanges = textView.selectedRanges
-            let focusedParagraphRange = MarkdownEditorStyler.focusedParagraphRange(in: value, selectedRange: textView.selectedRange())
+            let targetRange = overrideSelectedRange ?? textView.selectedRange()
+            let selectedRanges = overrideSelectedRange.map { [NSValue(range: $0)] } ?? textView.selectedRanges
+            let focusedParagraphRange = MarkdownEditorStyler.focusedParagraphRange(in: value, selectedRange: targetRange)
             isApplyingUpdate = true
             textView.textStorage?.setAttributedString(MarkdownEditorStyler.attributedText(for: value, focusedRange: focusedParagraphRange))
             textView.setSelectedRanges(selectedRanges, affinity: .downstream, stillSelecting: false)
@@ -456,6 +481,20 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
             keepSelectionComfortablyVisible(in: textView)
             isApplyingUpdate = false
             lastFocusedParagraphRange = focusedParagraphRange
+        }
+
+        func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange, replacementString: String?) -> Bool {
+            guard !isApplyingUpdate else {
+                return true
+            }
+
+            guard replacementString == "\n",
+                  let continuation = MarkdownEditorStyler.enterContinuation(in: textView.string, selectedRange: affectedCharRange) else {
+                return true
+            }
+
+            applyCustomEdit(on: textView, continuation: continuation)
+            return false
         }
 
         func textDidChange(_ notification: Notification) {
@@ -542,17 +581,33 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
             scrollView.contentView.setBoundsOrigin(NSPoint(x: 0, y: targetOffsetY))
             scrollView.reflectScrolledClipView(scrollView.contentView)
         }
+
+        private func applyCustomEdit(on textView: NSTextView, continuation: MarkdownEditorStyler.EnterContinuation) {
+            let updatedText = (textView.string as NSString).replacingCharacters(
+                in: continuation.replacementRange,
+                with: continuation.replacementText
+            )
+            let targetRange = NSRange(location: min(continuation.caretLocation, updatedText.utf16.count), length: 0)
+            text = updatedText
+            applyStyledText(on: textView, value: updatedText, selectedRange: targetRange, force: true)
+        }
     }
 }
 #endif
 
 private enum MarkdownEditorStyler {
+    struct EnterContinuation {
+        let replacementRange: NSRange
+        let replacementText: String
+        let caretLocation: Int
+    }
+
     private struct ActiveLineContext {
         enum Kind {
             case body
-            case frontmatterFence
+            case frontmatterFence(isOpening: Bool)
             case frontmatterField(separatorOffset: Int?)
-            case codeFence(leadingWhitespace: Int, markerLength: Int)
+            case codeFence(leadingWhitespace: Int, markerLength: Int, isOpening: Bool)
             case codeBlock
             case heading(level: Int, markerCount: Int, leadingWhitespace: Int)
             case quote(leadingWhitespace: Int)
@@ -593,7 +648,7 @@ private enum MarkdownEditorStyler {
                 return frontmatterKeyTypingAttributes
             }
             return frontmatterValueTypingAttributes
-        case let .codeFence(leadingWhitespace, markerLength):
+        case let .codeFence(leadingWhitespace, markerLength, _):
             let cursorOffset = max(selectedRange.location - lineContext.lineRange.location, 0)
             if cursorOffset <= leadingWhitespace + markerLength {
                 return codeFenceMarkerTypingAttributes
@@ -626,6 +681,81 @@ private enum MarkdownEditorStyler {
             return listTypingAttributes(markerLength: markerLength, leadingWhitespace: leadingWhitespace)
         case .body:
             return baseTypingAttributes
+        }
+    }
+
+    static func enterContinuation(in text: String, selectedRange: NSRange) -> EnterContinuation? {
+        guard selectedRange.length == 0 else {
+            return nil
+        }
+
+        let lineContext = activeLineContext(in: text, selectedRange: selectedRange)
+        let cursorLocation = selectedRange.location
+        let lineText = lineSubstring(in: text, range: lineContext.lineRange)
+        let lineEnd = lineContext.lineRange.location + lineContext.lineRange.length
+
+        switch lineContext.kind {
+        case let .quote(leadingWhitespace):
+            guard let info = quoteContinuationInfo(in: lineText, leadingWhitespace: leadingWhitespace) else {
+                return nil
+            }
+            if info.isEmpty {
+                return .init(replacementRange: lineContext.lineRange, replacementText: "", caretLocation: lineContext.lineRange.location)
+            }
+            return .init(
+                replacementRange: selectedRange,
+                replacementText: "\n\(info.prefix)",
+                caretLocation: cursorLocation + 1 + info.prefix.utf16.count
+            )
+        case .unorderedList:
+            guard let info = unorderedListContinuationInfo(in: lineText) else {
+                return nil
+            }
+            if info.isEmpty {
+                return .init(replacementRange: lineContext.lineRange, replacementText: "", caretLocation: lineContext.lineRange.location)
+            }
+            return .init(
+                replacementRange: selectedRange,
+                replacementText: "\n\(info.prefix)",
+                caretLocation: cursorLocation + 1 + info.prefix.utf16.count
+            )
+        case .orderedList:
+            guard let info = orderedListContinuationInfo(in: lineText) else {
+                return nil
+            }
+            if info.isEmpty {
+                return .init(replacementRange: lineContext.lineRange, replacementText: "", caretLocation: lineContext.lineRange.location)
+            }
+            return .init(
+                replacementRange: selectedRange,
+                replacementText: "\n\(info.prefix)",
+                caretLocation: cursorLocation + 1 + info.prefix.utf16.count
+            )
+        case let .codeFence(_, _, isOpening):
+            guard isOpening,
+                  cursorLocation == lineEnd,
+                  hasClosingCodeFence(after: lineEnd, in: text) == false,
+                  let closingFence = closingCodeFenceLine(for: lineText) else {
+                return nil
+            }
+            return .init(
+                replacementRange: selectedRange,
+                replacementText: "\n\n\(closingFence)",
+                caretLocation: cursorLocation + 1
+            )
+        case let .frontmatterFence(isOpening):
+            guard isOpening,
+                  cursorLocation == lineEnd,
+                  hasClosingFrontmatterFence(after: lineEnd, in: text) == false else {
+                return nil
+            }
+            return .init(
+                replacementRange: selectedRange,
+                replacementText: "\n\n---",
+                caretLocation: cursorLocation + 1
+            )
+        default:
+            return nil
         }
     }
 
@@ -1258,7 +1388,7 @@ private enum MarkdownEditorStyler {
 
             if index == 0, trimmed == "---" {
                 if isTargetLine {
-                    return .init(kind: .frontmatterFence, lineRange: lineRange, isLeadingBlock: false)
+                    return .init(kind: .frontmatterFence(isOpening: true), lineRange: lineRange, isLeadingBlock: false)
                 }
                 inFrontmatter = true
                 location = lineBoundaryEnd
@@ -1269,7 +1399,7 @@ private enum MarkdownEditorStyler {
                 if isTargetLine {
                     return .init(
                         kind: trimmed == "---"
-                            ? .frontmatterFence
+                            ? .frontmatterFence(isOpening: false)
                             : .frontmatterField(separatorOffset: frontmatterSeparatorOffset(in: line)),
                         lineRange: lineRange,
                         isLeadingBlock: false
@@ -1285,7 +1415,7 @@ private enum MarkdownEditorStyler {
             if trimmed.hasPrefix("```") {
                 if isTargetLine {
                     return .init(
-                        kind: .codeFence(leadingWhitespace: leadingWhitespaceCount(in: line), markerLength: 3),
+                        kind: .codeFence(leadingWhitespace: leadingWhitespaceCount(in: line), markerLength: 3, isOpening: inCodeBlock == false),
                         lineRange: lineRange,
                         isLeadingBlock: isLeadingBlock
                     )
@@ -1629,6 +1759,100 @@ private enum MarkdownEditorStyler {
             return nil
         }
         return line.distance(from: line.startIndex, to: separator)
+    }
+
+    private static func lineSubstring(in text: String, range: NSRange) -> String {
+        guard range.location != NSNotFound,
+              let textRange = Range(range, in: text) else {
+            return ""
+        }
+        return String(text[textRange])
+    }
+
+    private static func quoteContinuationInfo(in line: String, leadingWhitespace: Int) -> (prefix: String, isEmpty: Bool)? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard trimmed.hasPrefix(">") else {
+            return nil
+        }
+        let content = trimmed.dropFirst().drop { $0 == " " }
+        let prefix = String(repeating: " ", count: leadingWhitespace) + "> "
+        return (prefix: prefix, isEmpty: content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    private static func unorderedListContinuationInfo(in line: String) -> (prefix: String, isEmpty: Bool)? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") else {
+            return nil
+        }
+        let leadingWhitespace = leadingWhitespaceCount(in: line)
+        let marker = trimmed.prefix(1)
+        let content = trimmed.dropFirst(2)
+        let prefix = String(repeating: " ", count: leadingWhitespace) + marker + " "
+        return (prefix: prefix, isEmpty: content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    private static func orderedListContinuationInfo(in line: String) -> (prefix: String, isEmpty: Bool)? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard let regex = try? NSRegularExpression(pattern: #"^(\d+)\.\s"#) else {
+            return nil
+        }
+
+        let searchRange = NSRange(location: 0, length: (trimmed as NSString).length)
+        guard let match = regex.firstMatch(in: trimmed, range: searchRange),
+              match.numberOfRanges == 2,
+              let numberRange = Range(match.range(at: 1), in: trimmed),
+              let number = Int(trimmed[numberRange]) else {
+            return nil
+        }
+
+        let markerLength = match.range.length
+        let leadingWhitespace = leadingWhitespaceCount(in: line)
+        let contentStart = trimmed.index(trimmed.startIndex, offsetBy: markerLength)
+        let content = trimmed[contentStart...]
+        let prefix = String(repeating: " ", count: leadingWhitespace) + "\(number + 1). "
+        return (prefix: prefix, isEmpty: content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    private static func closingCodeFenceLine(for line: String) -> String? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard trimmed.hasPrefix("```") else {
+            return nil
+        }
+        return String(repeating: " ", count: leadingWhitespaceCount(in: line)) + "```"
+    }
+
+    private static func hasClosingCodeFence(after location: Int, in text: String) -> Bool {
+        let lines = text.components(separatedBy: "\n")
+        var currentLocation = 0
+
+        for (index, line) in lines.enumerated() {
+            let lineLength = (line as NSString).length
+            let lineRange = NSRange(location: currentLocation, length: lineLength)
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if lineRange.location > location, trimmed.hasPrefix("```") {
+                return true
+            }
+            currentLocation += lineLength + (index < lines.count - 1 ? 1 : 0)
+        }
+
+        return false
+    }
+
+    private static func hasClosingFrontmatterFence(after location: Int, in text: String) -> Bool {
+        let lines = text.components(separatedBy: "\n")
+        var currentLocation = 0
+
+        for (index, line) in lines.enumerated() {
+            let lineLength = (line as NSString).length
+            let lineRange = NSRange(location: currentLocation, length: lineLength)
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if lineRange.location > location, trimmed == "---" {
+                return true
+            }
+            currentLocation += lineLength + (index < lines.count - 1 ? 1 : 0)
+        }
+
+        return false
     }
 
     private static func codeFenceRange(in line: String, lineRange: NSRange) -> NSRange? {
