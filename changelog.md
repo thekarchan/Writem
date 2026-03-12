@@ -5,6 +5,7 @@ Dates use the local repository commit date.
 
 ## 2026-03-12
 
+- Make Show Toolbar a native action item and move auto theme under Theme
 - Simplify View appearance controls into top-level auto theme and a Theme submenu
 - Flatten View menu controls so Show Toolbar and Appearance sit at the top level
 - Add editable writing font controls under Edit and sync them across editor settings
