@@ -5,6 +5,7 @@ Dates use the local repository commit date.
 
 ## 2026-03-12
 
+- Group View menu controls into Editor and Appearance sections
 - Debounce full-document markdown restyling to reduce typing lag
 - Move theme selection into a nested View menu with explicit selection state
 - Move toolbar and auto-theme toggles into the View menu
