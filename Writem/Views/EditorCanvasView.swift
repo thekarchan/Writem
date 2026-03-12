@@ -471,7 +471,7 @@ private enum MarkdownEditorStyler {
                 .font: monoFont(size: 13),
                 .foregroundColor: textColor,
                 .backgroundColor: frontmatterBackground,
-                .paragraphStyle: paragraphStyle(lineSpacing: 7, paragraphSpacing: 4, firstLineHeadIndent: 10, headIndent: 10)
+                .paragraphStyle: paragraphStyle(lineSpacing: 7, paragraphSpacing: 4, firstLineHeadIndent: 14, headIndent: 14, tailIndent: -12)
             ],
             range: lineRange
         )
@@ -493,9 +493,9 @@ private enum MarkdownEditorStyler {
         attributed.addAttributes(
             [
                 .font: monoFont(size: 12),
-                .foregroundColor: ghostSyntaxColor,
+                .foregroundColor: structuralSyntaxColor,
                 .backgroundColor: codeBackground,
-                .paragraphStyle: paragraphStyle(lineSpacing: 4, paragraphSpacing: 4, paragraphSpacingBefore: 8, firstLineHeadIndent: 18, headIndent: 18)
+                .paragraphStyle: paragraphStyle(lineSpacing: 4, paragraphSpacing: 4, paragraphSpacingBefore: 8, firstLineHeadIndent: 24, headIndent: 24, tailIndent: -18)
             ],
             range: lineRange
         )
@@ -516,7 +516,7 @@ private enum MarkdownEditorStyler {
                 .font: monoFont(size: 13.5),
                 .foregroundColor: codeTextColor,
                 .backgroundColor: codeBackground,
-                .paragraphStyle: paragraphStyle(lineSpacing: 3, paragraphSpacing: 2, firstLineHeadIndent: 18, headIndent: 18)
+                .paragraphStyle: paragraphStyle(lineSpacing: 4, paragraphSpacing: 1, firstLineHeadIndent: 24, headIndent: 24, tailIndent: -18)
             ],
             range: lineRange
         )
@@ -588,13 +588,14 @@ private enum MarkdownEditorStyler {
                 .font: bodyFont,
                 .foregroundColor: quoteColor,
                 .backgroundColor: quoteBackground,
-                .paragraphStyle: paragraphStyle(lineSpacing: 10, paragraphSpacing: 12, paragraphSpacingBefore: 6, firstLineHeadIndent: 24, headIndent: 24)
+                .paragraphStyle: paragraphStyle(lineSpacing: 10, paragraphSpacing: 10, paragraphSpacingBefore: 8, firstLineHeadIndent: 30, headIndent: 30, tailIndent: -12)
             ],
             range: lineRange
         )
         attributed.addAttributes(
             [
-                .foregroundColor: faintSyntaxColor
+                .foregroundColor: structuralSyntaxColor,
+                .font: monoFont(size: 13)
             ],
             range: markerRange
         )
@@ -674,10 +675,10 @@ private enum MarkdownEditorStyler {
 
         attributed.addAttributes(
             [
-                .font: monoFont(size: 14),
+                .font: monoFont(size: 13.5),
                 .foregroundColor: textColor,
                 .backgroundColor: tableBackground,
-                .paragraphStyle: paragraphStyle(lineSpacing: 5, paragraphSpacing: 4, paragraphSpacingBefore: 6)
+                .paragraphStyle: paragraphStyle(lineSpacing: 4, paragraphSpacing: 4, paragraphSpacingBefore: 8, firstLineHeadIndent: 16, headIndent: 16, tailIndent: -14)
             ],
             range: lineRange
         )
@@ -1037,7 +1038,8 @@ private enum MarkdownEditorStyler {
         paragraphSpacing: CGFloat,
         paragraphSpacingBefore: CGFloat = 0,
         firstLineHeadIndent: CGFloat = 0,
-        headIndent: CGFloat = 0
+        headIndent: CGFloat = 0,
+        tailIndent: CGFloat = 0
     ) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.lineSpacing = lineSpacing
@@ -1045,6 +1047,7 @@ private enum MarkdownEditorStyler {
         style.paragraphSpacingBefore = paragraphSpacingBefore
         style.firstLineHeadIndent = firstLineHeadIndent
         style.headIndent = headIndent
+        style.tailIndent = tailIndent
         return style
     }
 
@@ -1081,19 +1084,19 @@ private enum MarkdownEditorStyler {
     }
 
     private static var frontmatterBackground: PlatformColor {
-        platformColor(red: 0.975, green: 0.973, blue: 0.966, alpha: 1)
+        platformColor(red: 0.972, green: 0.969, blue: 0.961, alpha: 1)
     }
 
     private static var quoteBackground: PlatformColor {
-        platformColor(red: 0.982, green: 0.981, blue: 0.975, alpha: 1)
+        platformColor(red: 0.978, green: 0.976, blue: 0.968, alpha: 1)
     }
 
     private static var tableBackground: PlatformColor {
-        platformColor(red: 0.985, green: 0.984, blue: 0.979, alpha: 1)
+        platformColor(red: 0.979, green: 0.977, blue: 0.969, alpha: 1)
     }
 
     private static var codeBackground: PlatformColor {
-        platformColor(red: 0.965, green: 0.962, blue: 0.954, alpha: 1)
+        platformColor(red: 0.958, green: 0.954, blue: 0.946, alpha: 1)
     }
 
     private static var codeTextColor: PlatformColor {
