@@ -1688,6 +1688,8 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
         private var isApplyingUpdate = false
         private var lastFocusedParagraphRange: NSRange?
         private var lastHandledCommandID: UUID?
+        private var pendingStyleWorkItem: DispatchWorkItem?
+        private var pendingStyleWorkItem: DispatchWorkItem?
 
         init(
             text: Binding<String>,
@@ -1712,6 +1714,8 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
         }
 
         func applyStyledText(on textView: UITextView, value: String, selectedRange overrideSelectedRange: NSRange? = nil, force: Bool) {
+            pendingStyleWorkItem?.cancel()
+            pendingStyleWorkItem = nil
             guard force || textView.attributedText?.string != value else {
                 return
             }
@@ -1778,7 +1782,10 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
             }
 
             text = textView.text
-            applyStyledText(on: textView, value: textView.text, force: true)
+            let selectedRange = textView.selectedRange
+            textView.typingAttributes = MarkdownEditorStyler.typingAttributes(for: textView.text, selectedRange: selectedRange)
+            updateSlashContext(for: textView.text, selectedRange: selectedRange)
+            scheduleStyledText(on: textView, value: textView.text, selectedRange: selectedRange)
         }
 
         func textViewDidBeginEditing(_ textView: UITextView) {
@@ -1803,7 +1810,7 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
                 return
             }
 
-            applyStyledText(on: textView, value: textView.text, force: true)
+            scheduleStyledText(on: textView, value: textView.text, selectedRange: textView.selectedRange)
         }
 
         private func keepSelectionComfortablyVisible(in textView: UITextView) {
@@ -1873,6 +1880,18 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
             )
             text = updatedText
             applyStyledText(on: textView, value: updatedText, selectedRange: targetRange, force: true)
+        }
+
+        private func scheduleStyledText(on textView: UITextView, value: String, selectedRange: NSRange) {
+            pendingStyleWorkItem?.cancel()
+            let workItem = DispatchWorkItem { [weak textView, weak self] in
+                guard let textView, let self else {
+                    return
+                }
+                self.applyStyledText(on: textView, value: value, selectedRange: selectedRange, force: true)
+            }
+            pendingStyleWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: workItem)
         }
 
         private func updateSlashContext(for text: String, selectedRange: NSRange) {
@@ -2065,6 +2084,7 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
         private var isApplyingUpdate = false
         private var lastFocusedParagraphRange: NSRange?
         private var lastHandledCommandID: UUID?
+        private var pendingStyleWorkItem: DispatchWorkItem?
 
         init(
             text: Binding<String>,
@@ -2089,6 +2109,8 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
         }
 
         func applyStyledText(on textView: NSTextView, value: String, selectedRange overrideSelectedRange: NSRange? = nil, force: Bool) {
+            pendingStyleWorkItem?.cancel()
+            pendingStyleWorkItem = nil
             guard force || textView.string != value else {
                 return
             }
@@ -2154,7 +2176,10 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
             }
 
             text = textView.string
-            applyStyledText(on: textView, value: textView.string, force: true)
+            let selectedRange = textView.selectedRange()
+            textView.typingAttributes = MarkdownEditorStyler.typingAttributes(for: textView.string, selectedRange: selectedRange)
+            updateSlashContext(for: textView.string, selectedRange: selectedRange)
+            scheduleStyledText(on: textView, value: textView.string, selectedRange: selectedRange)
         }
 
         func textDidBeginEditing(_ notification: Notification) {
@@ -2185,7 +2210,7 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
                 return
             }
 
-            applyStyledText(on: textView, value: textView.string, force: true)
+            scheduleStyledText(on: textView, value: textView.string, selectedRange: textView.selectedRange())
         }
 
         private func keepSelectionComfortablyVisible(in textView: NSTextView) {
@@ -2273,6 +2298,18 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
             let targetRange = MarkdownEditorStyler.clamped(selectedRange, maxLength: updatedText.utf16.count)
             text = updatedText
             applyStyledText(on: textView, value: updatedText, selectedRange: targetRange, force: true)
+        }
+
+        private func scheduleStyledText(on textView: NSTextView, value: String, selectedRange: NSRange) {
+            pendingStyleWorkItem?.cancel()
+            let workItem = DispatchWorkItem { [weak textView, weak self] in
+                guard let textView, let self else {
+                    return
+                }
+                self.applyStyledText(on: textView, value: value, selectedRange: selectedRange, force: true)
+            }
+            pendingStyleWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: workItem)
         }
 
         private func updateSlashContext(for text: String, selectedRange: NSRange) {
