@@ -27,6 +27,10 @@ struct EditorSlashTemplate: Identifiable, Equatable {
     let symbolName: String
     let detail: String
     let action: SlashTemplateAction
+
+    var searchTerms: [String] {
+        [title, detail]
+    }
 }
 
 struct EditorSlashCommand: Identifiable, Equatable {
@@ -40,6 +44,10 @@ struct EditorSlashCommand: Identifiable, Equatable {
 
     var canExpand: Bool {
         !secondaryTemplates.isEmpty
+    }
+
+    var searchTerms: [String] {
+        [id, title, detail] + aliases + secondaryTemplates.flatMap(\.searchTerms)
     }
 
     static let all: [EditorSlashCommand] = [
@@ -226,6 +234,265 @@ private enum SlashPaletteShortcut {
     }
 }
 
+private final class SlashUsageStore: ObservableObject {
+    @Published private(set) var revision = UUID()
+
+    private let defaults: UserDefaults
+
+    private enum Key {
+        static let sequence = "editor.slashUsageSequence"
+        static let usages = "editor.slashUsages"
+    }
+
+    private var sequence: Int
+    private var usages: [String: Int]
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        self.sequence = defaults.integer(forKey: Key.sequence)
+        self.usages = defaults.dictionary(forKey: Key.usages) as? [String: Int] ?? [:]
+    }
+
+    func record(commandID: String?, templateID: String?) {
+        sequence += 1
+
+        if let commandID {
+            usages["command:\(commandID)"] = sequence
+        }
+
+        if let templateID {
+            usages["template:\(templateID)"] = sequence
+        }
+
+        defaults.set(sequence, forKey: Key.sequence)
+        defaults.set(usages, forKey: Key.usages)
+        revision = UUID()
+    }
+
+    func recency(for command: EditorSlashCommand) -> Int {
+        let commandRecency = usages["command:\(command.id)"] ?? 0
+        let templateRecency = ([command.primaryTemplate] + command.secondaryTemplates)
+            .compactMap { usages["template:\($0.id)"] }
+            .max() ?? 0
+        return max(commandRecency, templateRecency)
+    }
+
+    func recency(for template: EditorSlashTemplate) -> Int {
+        usages["template:\(template.id)"] ?? 0
+    }
+}
+
+private enum SlashPaletteSearch {
+    private struct RankedCommand {
+        let command: EditorSlashCommand
+        let matchScore: Int
+        let recency: Int
+        let index: Int
+    }
+
+    private struct RankedTemplate {
+        let template: EditorSlashTemplate
+        let matchScore: Int
+        let recency: Int
+        let index: Int
+    }
+
+    static func rankCommands(
+        _ commands: [EditorSlashCommand],
+        query: String,
+        usageStore: SlashUsageStore
+    ) -> [EditorSlashCommand] {
+        let normalizedQuery = normalize(query)
+
+        return Array(commands.enumerated())
+            .compactMap { item in
+                let index = item.offset
+                let command = item.element
+
+                guard let matchScore = commandScore(for: command, query: normalizedQuery) else {
+                    return nil
+                }
+
+                return RankedCommand(
+                    command: command,
+                    matchScore: matchScore,
+                    recency: usageStore.recency(for: command),
+                    index: index
+                )
+            }
+            .sorted { (lhs: RankedCommand, rhs: RankedCommand) in
+                if lhs.matchScore != rhs.matchScore {
+                    return lhs.matchScore > rhs.matchScore
+                }
+                if lhs.recency != rhs.recency {
+                    return lhs.recency > rhs.recency
+                }
+                return lhs.index < rhs.index
+            }
+            .map(\.command)
+    }
+
+    static func rankTemplates(
+        _ templates: [EditorSlashTemplate],
+        query: String,
+        usageStore: SlashUsageStore
+    ) -> [EditorSlashTemplate] {
+        let normalizedQuery = normalize(query)
+
+        return Array(templates.enumerated())
+            .compactMap { item in
+                let index = item.offset
+                let template = item.element
+
+                return RankedTemplate(
+                    template: template,
+                    matchScore: templateScore(for: template, query: normalizedQuery) ?? 0,
+                    recency: usageStore.recency(for: template),
+                    index: index
+                )
+            }
+            .sorted { (lhs: RankedTemplate, rhs: RankedTemplate) in
+                if lhs.matchScore != rhs.matchScore {
+                    return lhs.matchScore > rhs.matchScore
+                }
+                if lhs.recency != rhs.recency {
+                    return lhs.recency > rhs.recency
+                }
+                return lhs.index < rhs.index
+            }
+            .map(\.template)
+    }
+
+    private static func commandScore(for command: EditorSlashCommand, query: String) -> Int? {
+        compositeScore(for: command.searchTerms, query: query)
+    }
+
+    private static func templateScore(for template: EditorSlashTemplate, query: String) -> Int? {
+        compositeScore(for: template.searchTerms, query: query)
+    }
+
+    private static func compositeScore(for terms: [String], query: String) -> Int? {
+        guard !query.isEmpty else {
+            return 0
+        }
+
+        let tokens = query.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard !tokens.isEmpty else {
+            return 0
+        }
+
+        var totalScore = 0
+
+        for token in tokens {
+            let bestTokenScore = terms.compactMap { score(token: token, against: $0) }.max()
+            guard let bestTokenScore else {
+                return nil
+            }
+            totalScore += bestTokenScore
+        }
+
+        return totalScore
+    }
+
+    private static func score(token: String, against rawTerm: String) -> Int? {
+        let term = normalize(rawTerm)
+        guard !term.isEmpty, !token.isEmpty else {
+            return nil
+        }
+
+        if term == token {
+            return 1800
+        }
+
+        if term.hasPrefix(token) {
+            return 1500 - min(term.count, 180)
+        }
+
+        if let wordScore = wordPrefixScore(token: token, term: term) {
+            return wordScore
+        }
+
+        let initials = wordInitials(for: term)
+        if !initials.isEmpty, initials.hasPrefix(token) {
+            return 1080 + (token.count * 16)
+        }
+
+        if let range = term.range(of: token) {
+            let distance = term.distance(from: term.startIndex, to: range.lowerBound)
+            return 920 - min(distance * 6, 240)
+        }
+
+        if let fuzzyScore = fuzzySubsequenceScore(token: token, term: term) {
+            return 620 + fuzzyScore
+        }
+
+        return nil
+    }
+
+    private static func wordPrefixScore(token: String, term: String) -> Int? {
+        let words = term.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+        guard let index = words.firstIndex(where: { $0.hasPrefix(token) }) else {
+            return nil
+        }
+
+        return 1240 - (index * 18) - min(words[index].count, 80)
+    }
+
+    private static func wordInitials(for term: String) -> String {
+        term.split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .compactMap(\.first)
+            .map { String($0) }
+            .joined()
+    }
+
+    private static func fuzzySubsequenceScore(token: String, term: String) -> Int? {
+        var searchStart = term.startIndex
+        var previousMatchOffset: Int?
+        var score = 0
+        let tokenCharacters = Array(token)
+
+        for character in tokenCharacters {
+            guard let matchIndex = term[searchStart...].firstIndex(of: character) else {
+                return nil
+            }
+
+            let offset = term.distance(from: term.startIndex, to: matchIndex)
+            score += 18
+
+            if let previousMatchOffset {
+                let gap = offset - previousMatchOffset
+                if gap == 1 {
+                    score += 20
+                } else {
+                    score += max(0, 10 - gap)
+                }
+            }
+
+            if offset == 0 {
+                score += 12
+            } else {
+                let previousIndex = term.index(before: matchIndex)
+                if !term[previousIndex].isLetter && !term[previousIndex].isNumber {
+                    score += 12
+                }
+            }
+
+            searchStart = term.index(after: matchIndex)
+            previousMatchOffset = offset
+        }
+
+        score -= max(term.count - tokenCharacters.count, 0)
+        return max(score, 1)
+    }
+
+    private static func normalize(_ value: String) -> String {
+        value
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
 struct EditorCanvasCommand: Identifiable, Equatable {
     enum Action: Equatable {
         case bold
@@ -248,6 +515,7 @@ struct EditorCanvasView: View {
     let onRequestImageImport: (NSRange) -> Void
     let onCommandHandled: (UUID) -> Void
 
+    @StateObject private var slashUsageStore = SlashUsageStore()
     @State private var isImageDropTarget = false
     @State private var shouldFocusEditor = false
     @State private var slashContext: SlashCommandContext?
@@ -344,7 +612,14 @@ struct EditorCanvasView: View {
             return []
         }
 
-        return Array(EditorSlashCommand.matching(query: slashContext.query).prefix(6))
+        return Array(
+            SlashPaletteSearch.rankCommands(
+                EditorSlashCommand.all,
+                query: slashContext.query,
+                usageStore: slashUsageStore
+            )
+            .prefix(6)
+        )
     }
 
     private var activeSlashCommand: EditorSlashCommand? {
@@ -365,7 +640,15 @@ struct EditorCanvasView: View {
     }
 
     private var visibleSlashTemplates: [EditorSlashTemplate] {
-        expandedSlashCommand?.secondaryTemplates ?? []
+        guard let expandedSlashCommand else {
+            return []
+        }
+
+        return SlashPaletteSearch.rankTemplates(
+            expandedSlashCommand.secondaryTemplates,
+            query: slashContext?.query ?? "",
+            usageStore: slashUsageStore
+        )
     }
 
     private var activeSlashTemplate: EditorSlashTemplate? {
@@ -378,10 +661,21 @@ struct EditorCanvasView: View {
     }
 
     private func issueSlashCommand(_ slashCommand: EditorSlashCommand, context: SlashCommandContext) {
-        issueSlashTemplate(slashCommand.primaryTemplate, context: context)
+        slashUsageStore.record(commandID: slashCommand.id, templateID: slashCommand.primaryTemplate.id)
+        applySlashTemplate(slashCommand.primaryTemplate, context: context)
     }
 
     private func issueSlashTemplate(_ template: EditorSlashTemplate, context: SlashCommandContext) {
+        let parentCommandID = expandedSlashCommand?.id
+            ?? visibleSlashCommands.first(where: {
+                $0.primaryTemplate.id == template.id || $0.secondaryTemplates.contains(template)
+            })?.id
+
+        slashUsageStore.record(commandID: parentCommandID, templateID: template.id)
+        applySlashTemplate(template, context: context)
+    }
+
+    private func applySlashTemplate(_ template: EditorSlashTemplate, context: SlashCommandContext) {
         switch template.action {
         case let .insert(content):
             let replacement = MarkdownEditorStyler.replacement(for: content, context: context)
