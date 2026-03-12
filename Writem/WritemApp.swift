@@ -38,6 +38,25 @@ private struct EditorFileCommands: Commands {
                 session.requestOpenDocument()
             }
             .keyboardShortcut("o", modifiers: .command)
+
+            Menu("Open Recent") {
+                if session.recentDocuments.isEmpty {
+                    Button("No Recent Documents") {}
+                        .disabled(true)
+                } else {
+                    ForEach(session.recentDocuments) { item in
+                        Button(item.menuTitle) {
+                            session.requestOpenRecentDocument(item)
+                        }
+                    }
+
+                    Divider()
+
+                    Button("Clear Menu") {
+                        session.clearRecentDocuments()
+                    }
+                }
+            }
         }
 
         CommandGroup(replacing: .saveItem) {

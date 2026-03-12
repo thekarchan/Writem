@@ -36,6 +36,7 @@ struct EditorSaveRequest: Identifiable, Equatable {
 enum EditorTransitionAction: Equatable {
     case newDraft
     case openDocument
+    case openRecentDocument(String)
 }
 
 struct EditorTransitionRequest: Identifiable, Equatable {
@@ -43,9 +44,26 @@ struct EditorTransitionRequest: Identifiable, Equatable {
     let action: EditorTransitionAction
 }
 
+struct RecentDocumentItem: Identifiable, Equatable, Codable {
+    let id: String
+    let displayName: String
+    let parentPath: String
+    let bookmarkData: Data
+    let lastOpenedAt: Date
+
+    var menuTitle: String {
+        guard !parentPath.isEmpty else {
+            return displayName
+        }
+
+        return "\(displayName)  \(parentPath)"
+    }
+}
+
 enum EditorSessionError: LocalizedError {
     case invalidTextEncoding
     case missingSaveLocation
+    case recentDocumentUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -53,6 +71,8 @@ enum EditorSessionError: LocalizedError {
             return "The selected file could not be read as UTF-8 Markdown."
         case .missingSaveLocation:
             return "Choose a save location first."
+        case .recentDocumentUnavailable:
+            return "The recent document could not be opened anymore."
         }
     }
 }
@@ -64,6 +84,7 @@ final class EditorSessionStore: ObservableObject {
     @Published private(set) var isDirty: Bool
     @Published private(set) var transitionRequest: EditorTransitionRequest?
     @Published private(set) var saveRequest: EditorSaveRequest?
+    @Published private(set) var recentDocuments: [RecentDocumentItem]
 
     private let defaults: UserDefaults
     private var lastSavedText: String
@@ -72,6 +93,7 @@ final class EditorSessionStore: ObservableObject {
 
     private enum Key {
         static let scratchText = "editor.scratchText"
+        static let recentDocuments = "editor.recentDocuments"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -81,6 +103,7 @@ final class EditorSessionStore: ObservableObject {
         self.fileURL = nil
         self.lastSavedText = ""
         self.isDirty = !scratchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        self.recentDocuments = Self.loadRecentDocuments(from: defaults)
 
         bindChanges()
     }
@@ -101,6 +124,10 @@ final class EditorSessionStore: ObservableObject {
 
     func requestOpenDocument() {
         transitionRequest = .init(action: .openDocument)
+    }
+
+    func requestOpenRecentDocument(_ item: RecentDocumentItem) {
+        transitionRequest = .init(action: .openRecentDocument(item.id))
     }
 
     func consumeTransitionRequest() {
@@ -137,6 +164,8 @@ final class EditorSessionStore: ObservableObject {
             lastSavedText = loadedText
             isDirty = false
         }
+
+        rememberRecentDocument(url)
     }
 
     func saveToCurrentLocation() throws {
@@ -147,6 +176,7 @@ final class EditorSessionStore: ObservableObject {
         try write(text, to: fileURL)
         lastSavedText = text
         isDirty = false
+        rememberRecentDocument(fileURL)
     }
 
     func finishSave(at url: URL) {
@@ -156,6 +186,43 @@ final class EditorSessionStore: ObservableObject {
             isDirty = false
             defaults.set("", forKey: Key.scratchText)
         }
+
+        rememberRecentDocument(url)
+    }
+
+    func resolveRecentDocumentURL(for id: String) throws -> URL {
+        guard let item = recentDocuments.first(where: { $0.id == id }) else {
+            throw EditorSessionError.recentDocumentUnavailable
+        }
+
+        var isStale = false
+        let url = try URL(
+            resolvingBookmarkData: item.bookmarkData,
+            options: [.withSecurityScope],
+            relativeTo: nil,
+            bookmarkDataIsStale: &isStale
+        )
+
+        if isStale {
+            rememberRecentDocument(url)
+        }
+
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            removeRecentDocument(id: id)
+            throw EditorSessionError.recentDocumentUnavailable
+        }
+
+        return url
+    }
+
+    func clearRecentDocuments() {
+        recentDocuments = []
+        defaults.removeObject(forKey: Key.recentDocuments)
+    }
+
+    func removeRecentDocument(id: String) {
+        recentDocuments.removeAll { $0.id == id }
+        persistRecentDocuments()
     }
 
     private func bindChanges() {
@@ -194,6 +261,49 @@ final class EditorSessionStore: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+    }
+
+    private func rememberRecentDocument(_ url: URL) {
+        guard url.isFileURL else { return }
+
+        do {
+            let bookmarkData = try url.bookmarkData(
+                options: [.withSecurityScope],
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            )
+            let item = RecentDocumentItem(
+                id: url.standardizedFileURL.path,
+                displayName: url.deletingPathExtension().lastPathComponent,
+                parentPath: url.deletingLastPathComponent().lastPathComponent,
+                bookmarkData: bookmarkData,
+                lastOpenedAt: Date()
+            )
+
+            recentDocuments.removeAll { $0.id == item.id }
+            recentDocuments.insert(item, at: 0)
+            recentDocuments = Array(recentDocuments.prefix(8))
+            persistRecentDocuments()
+        } catch {
+            // Ignore bookmark failures so opening and saving never fail because of recents.
+        }
+    }
+
+    private func persistRecentDocuments() {
+        do {
+            let data = try JSONEncoder().encode(recentDocuments)
+            defaults.set(data, forKey: Key.recentDocuments)
+        } catch {
+            defaults.removeObject(forKey: Key.recentDocuments)
+        }
+    }
+
+    private static func loadRecentDocuments(from defaults: UserDefaults) -> [RecentDocumentItem] {
+        guard let data = defaults.data(forKey: Key.recentDocuments) else {
+            return []
+        }
+
+        return (try? JSONDecoder().decode([RecentDocumentItem].self, from: data)) ?? []
     }
 
     private func write(_ text: String, to url: URL) throws {

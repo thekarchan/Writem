@@ -18,6 +18,7 @@ struct EditorRootView: View {
     private enum PendingTransitionAction {
         case newDraft
         case openDocument
+        case openRecentDocument(String)
     }
 
     @State private var columnVisibility: NavigationSplitViewVisibility = .detailOnly
@@ -439,11 +440,11 @@ struct EditorRootView: View {
     @ViewBuilder
     private func editorWorkspace(in size: CGSize) -> some View {
         let usesPinnedSidebar = size.width >= 1080
-        let horizontalPadding = settings.showToolbar ? 18.0 : 10.0
-        let verticalPadding = settings.showToolbar ? 10.0 : 0.0
+        let horizontalPadding = 0.0
+        let verticalPadding = 0.0
 
         if usesPinnedSidebar {
-            HStack(spacing: 18) {
+            HStack(spacing: 0) {
                 editorCanvas(forFloatingSidebar: false)
 
                 if let utilityPanel {
@@ -661,6 +662,8 @@ struct EditorRootView: View {
                 return .newDraft
             case .openDocument:
                 return .openDocument
+            case let .openRecentDocument(id):
+                return .openRecentDocument(id)
             }
         }()
 
@@ -703,6 +706,13 @@ struct EditorRootView: View {
             utilityPanel = nil
         case .openDocument:
             isImportingDocument = true
+        case let .openRecentDocument(id):
+            do {
+                let url = try session.resolveRecentDocumentURL(for: id)
+                openDocument(from: url)
+            } catch {
+                editorAlert = .init(title: "Open failed", message: error.localizedDescription)
+            }
         }
     }
 
@@ -853,8 +863,8 @@ struct EditorRootView: View {
                 LinearGradient(
                     colors: [
                         Color.clear,
-                        Color.black.opacity(0.018),
-                        Color(red: 0.35, green: 0.31, blue: 0.28).opacity(0.06)
+                        Color.black.opacity(0.012),
+                        Color(red: 0.35, green: 0.31, blue: 0.28).opacity(0.04)
                     ],
                     startPoint: .leading,
                     endPoint: .trailing

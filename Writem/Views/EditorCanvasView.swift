@@ -791,7 +791,28 @@ struct EditorCanvasView: View {
     }
 
     var body: some View {
-        centeredEditor
+        MarkdownWritingTextView(
+            text: $text,
+            preferredLineWidth: lineWidth,
+            isFocused: $shouldFocusEditor,
+            command: activeCommand,
+            onCommandHandled: handleCommandHandled,
+            slashContext: $slashContext,
+            visibleSlashCommands: visibleSlashCommands,
+            visibleSlashTemplates: visibleSlashTemplates,
+            selectedSlashCommandID: selectedSlashCommandID,
+            selectedSlashTemplateID: selectedSlashTemplateID,
+            expandedSlashCommand: expandedSlashCommand,
+            onSelectSlashCommand: issueSlashCommand,
+            onSelectSlashTemplate: issueSlashTemplate,
+            onSelectSlashQuickIndex: selectSlashQuickIndex,
+            onSubmitSlashSelection: submitSlashSelection,
+            onExpandActiveSlashCommand: { expandSlashTemplates(for: activeSlashCommand) },
+            onExpandSpecificSlashCommand: { expandSlashTemplates(for: $0) },
+            onMoveSlashSelection: moveSlashSelection,
+            onCollapseSlashTemplates: collapseSlashTemplates,
+            onDismissSlashPalette: cancelSlashPalette
+        )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .dropDestination(for: URL.self) { items, _ in
                 onDropImageFiles(items)
@@ -827,38 +848,6 @@ struct EditorCanvasView: View {
             .onChange(of: visibleSlashTemplateIDs) { _, _ in
                 syncSlashSelection()
             }
-    }
-
-    private var centeredEditor: some View {
-        HStack(alignment: .top) {
-            Spacer(minLength: 0)
-            MarkdownWritingTextView(
-                text: $text,
-                isFocused: $shouldFocusEditor,
-                command: activeCommand,
-                onCommandHandled: handleCommandHandled,
-                slashContext: $slashContext,
-                visibleSlashCommands: visibleSlashCommands,
-                visibleSlashTemplates: visibleSlashTemplates,
-                selectedSlashCommandID: selectedSlashCommandID,
-                selectedSlashTemplateID: selectedSlashTemplateID,
-                expandedSlashCommand: expandedSlashCommand,
-                onSelectSlashCommand: issueSlashCommand,
-                onSelectSlashTemplate: issueSlashTemplate,
-                onSelectSlashQuickIndex: selectSlashQuickIndex,
-                onSubmitSlashSelection: submitSlashSelection,
-                onExpandActiveSlashCommand: { expandSlashTemplates(for: activeSlashCommand) },
-                onExpandSpecificSlashCommand: { expandSlashTemplates(for: $0) },
-                onMoveSlashSelection: moveSlashSelection,
-                onCollapseSlashTemplates: collapseSlashTemplates,
-                onDismissSlashPalette: cancelSlashPalette
-            )
-                .frame(maxWidth: lineWidth, maxHeight: .infinity)
-                .padding(.top, 24)
-                .padding(.bottom, 22)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 32)
     }
 
     private var visibleSlashCommands: [EditorSlashCommand] {
@@ -1117,6 +1106,7 @@ private struct MarkdownWritingTextView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     @Binding var text: String
+    let preferredLineWidth: CGFloat
     @Binding var isFocused: Bool
     let command: EditorCanvasCommand?
     let onCommandHandled: (UUID) -> Void
@@ -1140,154 +1130,65 @@ private struct MarkdownWritingTextView: View {
         WritingLayoutProfile.current(for: text)
     }
 
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            colorScheme == .dark
-                                ? Color.white.opacity(0.035)
-                                : Color(red: 0.58, green: 0.54, blue: 0.48).opacity(0.08),
-                            colorScheme == .dark
-                                ? Color.black.opacity(0.14)
-                                : Color.black.opacity(0.015)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .blur(radius: 24)
-                .scaleEffect(x: 0.96, y: 1.02)
-                .offset(y: 18)
-
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            colorScheme == .dark
-                                ? Color(red: 0.135, green: 0.14, blue: 0.15)
-                                : Color(red: 1.0, green: 0.999, blue: 0.996),
-                            colorScheme == .dark
-                                ? Color(red: 0.115, green: 0.12, blue: 0.13)
-                                : Color(red: 0.993, green: 0.991, blue: 0.985),
-                            layoutProfile.isBlank
-                                ? (colorScheme == .dark
-                                    ? Color(red: 0.105, green: 0.11, blue: 0.12)
-                                    : Color(red: 0.986, green: 0.983, blue: 0.976))
-                                : (colorScheme == .dark
-                                    ? Color(red: 0.112, green: 0.116, blue: 0.126)
-                                    : Color(red: 0.989, green: 0.986, blue: 0.978))
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .overlay(alignment: .top) {
-                    Rectangle()
-                        .fill(colorScheme == .dark ? Color.white.opacity(0.08) : Color.white.opacity(0.75))
-                        .frame(height: 1)
-                        .padding(.horizontal, 20)
-                }
-                .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.26 : 0.025), radius: 10, x: 0, y: 2)
-                .shadow(color: Color(red: 0.3, green: 0.28, blue: 0.23).opacity(colorScheme == .dark ? 0.18 : 0.08), radius: 22, x: 0, y: 14)
-
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(
-                    colorScheme == .dark
-                        ? Color.white.opacity(0.10)
-                        : Color(red: 0.58, green: 0.54, blue: 0.48).opacity(0.16),
-                    lineWidth: 0.8
-                )
-
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(colorScheme == .dark ? Color.white.opacity(0.04) : Color.white.opacity(0.55), lineWidth: 0.6)
-                .padding(1.4)
-
-            PlatformMarkdownTextView(
-                text: $text,
-                isFocused: $isFocused,
-                layoutProfile: layoutProfile,
-                command: command,
-                onCommandHandled: onCommandHandled,
-                slashContext: $slashContext,
-                onMoveSlashSelection: onMoveSlashSelection,
-                onSelectSlashQuickIndex: onSelectSlashQuickIndex,
-                onSubmitSlashSelection: onSubmitSlashSelection,
-                onExpandSlashTemplates: onExpandActiveSlashCommand,
-                onCollapseSlashTemplates: onCollapseSlashTemplates,
-                isShowingSlashTemplates: expandedSlashCommand != nil,
-                onDismissSlashPalette: onDismissSlashPalette
-            )
-                .padding(.horizontal, 42)
-                .padding(.vertical, layoutProfile.pageVerticalPadding)
-        }
-        .overlay(alignment: .topLeading) {
-            if let slashContext {
-                SlashCommandPaletteView(
-                    commands: visibleSlashCommands,
-                    templates: visibleSlashTemplates,
-                    selectedCommandID: selectedSlashCommandID,
-                    selectedTemplateID: selectedSlashTemplateID,
-                    expandedCommand: expandedSlashCommand,
-                    query: slashContext.query,
-                    onSelectCommand: { command in
-                        onSelectSlashCommand(command, slashContext)
-                    },
-                    onSelectTemplate: { template in
-                        onSelectSlashTemplate(template, slashContext)
-                    },
-                    onExpandCommand: { command in
-                        onExpandSpecificSlashCommand(command)
-                    },
-                    onCollapse: onCollapseSlashTemplates
-                )
-                .padding(.top, 26)
-                .padding(.leading, 30)
-            }
-        }
-        .overlay(alignment: .top) {
-            pageEdgeFade(alignment: .top)
-                .padding(.horizontal, 18)
-                .padding(.top, 10)
-        }
-        .overlay(alignment: .bottom) {
-            pageEdgeFade(alignment: .bottom)
-                .padding(.horizontal, 18)
-                .padding(.bottom, 10)
-        }
-        .padding(.horizontal, 6)
+    private var minimumHorizontalInset: CGFloat {
+        #if canImport(AppKit)
+        return 34
+        #else
+        return 22
+        #endif
     }
 
-    @ViewBuilder
-    private func pageEdgeFade(alignment: VerticalAlignment) -> some View {
-        Rectangle()
-            .fill(
-                LinearGradient(
-                    colors: alignment == .top
-                        ? [
-                            colorScheme == .dark
-                                ? Color(red: 0.13, green: 0.135, blue: 0.145)
-                                : Color(red: 0.995, green: 0.993, blue: 0.988),
-                            (colorScheme == .dark
-                                ? Color(red: 0.13, green: 0.135, blue: 0.145)
-                                : Color(red: 0.995, green: 0.993, blue: 0.988)).opacity(0)
-                        ]
-                        : [
-                            (colorScheme == .dark
-                                ? Color(red: 0.13, green: 0.135, blue: 0.145)
-                                : Color(red: 0.995, green: 0.993, blue: 0.988)).opacity(0),
-                            colorScheme == .dark
-                                ? Color(red: 0.10, green: 0.105, blue: 0.115)
-                                : Color(red: 0.991, green: 0.988, blue: 0.982)
-                        ],
-                    startPoint: alignment == .top ? .top : .top,
-                    endPoint: alignment == .top ? .bottom : .bottom
+    var body: some View {
+        GeometryReader { proxy in
+            let horizontalInset = max(minimumHorizontalInset, (proxy.size.width - preferredLineWidth) / 2)
+
+            ZStack(alignment: .topLeading) {
+                PlatformMarkdownTextView(
+                    text: $text,
+                    isFocused: $isFocused,
+                    layoutProfile: layoutProfile,
+                    horizontalInset: horizontalInset,
+                    command: command,
+                    onCommandHandled: onCommandHandled,
+                    slashContext: $slashContext,
+                    onMoveSlashSelection: onMoveSlashSelection,
+                    onSelectSlashQuickIndex: onSelectSlashQuickIndex,
+                    onSubmitSlashSelection: onSubmitSlashSelection,
+                    onExpandSlashTemplates: onExpandActiveSlashCommand,
+                    onCollapseSlashTemplates: onCollapseSlashTemplates,
+                    isShowingSlashTemplates: expandedSlashCommand != nil,
+                    onDismissSlashPalette: onDismissSlashPalette
                 )
+
+                if let slashContext {
+                    SlashCommandPaletteView(
+                        commands: visibleSlashCommands,
+                        templates: visibleSlashTemplates,
+                        selectedCommandID: selectedSlashCommandID,
+                        selectedTemplateID: selectedSlashTemplateID,
+                        expandedCommand: expandedSlashCommand,
+                        query: slashContext.query,
+                        onSelectCommand: { command in
+                            onSelectSlashCommand(command, slashContext)
+                        },
+                        onSelectTemplate: { template in
+                            onSelectSlashTemplate(template, slashContext)
+                        },
+                        onExpandCommand: { command in
+                            onExpandSpecificSlashCommand(command)
+                        },
+                        onCollapse: onCollapseSlashTemplates
+                    )
+                    .padding(.top, 18)
+                    .padding(.leading, max(horizontalInset - 10, 12))
+                }
+            }
+            .background(
+                colorScheme == .dark
+                    ? Color(red: 0.09, green: 0.095, blue: 0.105)
+                    : Color(red: 0.992, green: 0.99, blue: 0.985)
             )
-            .frame(height: alignment == .top ? layoutProfile.topFadeHeight : layoutProfile.bottomFadeHeight)
-            .allowsHitTesting(false)
-            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+        }
     }
 }
 
@@ -1693,6 +1594,7 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
     @Binding var text: String
     @Binding var isFocused: Bool
     let layoutProfile: WritingLayoutProfile
+    let horizontalInset: CGFloat
     let command: EditorCanvasCommand?
     let onCommandHandled: (UUID) -> Void
     @Binding var slashContext: SlashCommandContext?
@@ -1759,7 +1661,12 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
     }
 
     private func applyLayoutMetrics(to textView: UITextView, for layoutProfile: WritingLayoutProfile) {
-        textView.textContainerInset = UIEdgeInsets(top: layoutProfile.topInset, left: 0, bottom: layoutProfile.bottomInset, right: 0)
+        textView.textContainerInset = UIEdgeInsets(
+            top: layoutProfile.topInset,
+            left: horizontalInset,
+            bottom: layoutProfile.bottomInset,
+            right: horizontalInset
+        )
         textView.scrollIndicatorInsets = UIEdgeInsets(
             top: layoutProfile.scrollIndicatorTopInset,
             left: 0,
@@ -2050,6 +1957,7 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
     @Binding var text: String
     @Binding var isFocused: Bool
     let layoutProfile: WritingLayoutProfile
+    let horizontalInset: CGFloat
     let command: EditorCanvasCommand?
     let onCommandHandled: (UUID) -> Void
     @Binding var slashContext: SlashCommandContext?
@@ -2092,7 +2000,7 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
         textView.isAutomaticQuoteSubstitutionEnabled = true
         textView.isAutomaticDashSubstitutionEnabled = true
         textView.isAutomaticSpellingCorrectionEnabled = true
-        textView.textContainerInset = NSSize(width: 0, height: layoutProfile.topInset)
+        textView.textContainerInset = NSSize(width: horizontalInset, height: layoutProfile.topInset)
         textView.textContainer?.lineFragmentPadding = 0
         textView.isHorizontallyResizable = false
         textView.isVerticallyResizable = true
@@ -2135,7 +2043,7 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
     }
 
     private func applyLayoutMetrics(to scrollView: NSScrollView, textView: NSTextView, for layoutProfile: WritingLayoutProfile) {
-        textView.textContainerInset = NSSize(width: 0, height: layoutProfile.topInset)
+        textView.textContainerInset = NSSize(width: horizontalInset, height: layoutProfile.topInset)
         scrollView.contentInsets = NSEdgeInsets(
             top: layoutProfile.scrollViewTopInset,
             left: 0,

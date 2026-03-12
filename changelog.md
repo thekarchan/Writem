@@ -5,6 +5,7 @@ Dates use the local repository commit date.
 
 ## 2026-03-12
 
+- Add File menu recent documents and make the editor surface full-width editable
 - Add unsaved-changes confirmation before opening or replacing the current draft
 - Switch app launch flow to a scratch-based writing session with app-managed open/save
 - Simplify editor chrome with hidden toolbar and auto theme controls
