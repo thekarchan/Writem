@@ -394,12 +394,6 @@ struct EditorRootView: View {
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(Color.secondary.opacity(0.78))
                     }
-
-                    Text(currentDocumentTitle)
-                        .font(.system(size: 12, weight: .medium, design: .serif))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .opacity(0.82)
                 }
                 .padding(.leading, 14)
                 .padding(.trailing, 6)
