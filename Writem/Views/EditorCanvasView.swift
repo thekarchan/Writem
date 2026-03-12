@@ -54,11 +54,11 @@ struct EditorCanvasView: View {
             Spacer(minLength: 0)
             MarkdownWritingTextView(text: $text, isFocused: $shouldFocusEditor)
                 .frame(maxWidth: lineWidth, maxHeight: .infinity)
-                .padding(.top, 36)
-                .padding(.bottom, 34)
+                .padding(.top, 24)
+                .padding(.bottom, 22)
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 38)
+        .padding(.horizontal, 32)
     }
 }
 
@@ -113,10 +113,42 @@ private struct MarkdownWritingTextView: View {
 
             PlatformMarkdownTextView(text: $text, isFocused: $isFocused)
                 .padding(.horizontal, 42)
-                .padding(.vertical, 40)
+                .padding(.vertical, 18)
         }
-        .padding(.horizontal, 10)
-        .padding(.bottom, 8)
+        .overlay(alignment: .top) {
+            pageEdgeFade(alignment: .top)
+                .padding(.horizontal, 18)
+                .padding(.top, 10)
+        }
+        .overlay(alignment: .bottom) {
+            pageEdgeFade(alignment: .bottom)
+                .padding(.horizontal, 18)
+                .padding(.bottom, 10)
+        }
+        .padding(.horizontal, 6)
+    }
+
+    @ViewBuilder
+    private func pageEdgeFade(alignment: VerticalAlignment) -> some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    colors: alignment == .top
+                        ? [
+                            Color(red: 0.995, green: 0.993, blue: 0.988),
+                            Color(red: 0.995, green: 0.993, blue: 0.988).opacity(0)
+                        ]
+                        : [
+                            Color(red: 0.995, green: 0.993, blue: 0.988).opacity(0),
+                            Color(red: 0.991, green: 0.988, blue: 0.982)
+                        ],
+                    startPoint: alignment == .top ? .top : .top,
+                    endPoint: alignment == .top ? .bottom : .bottom
+                )
+            )
+            .frame(height: alignment == .top ? 52 : 72)
+            .allowsHitTesting(false)
+            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
     }
 }
 
@@ -140,8 +172,9 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
         textView.smartDashesType = .yes
         textView.adjustsFontForContentSizeCategory = true
         textView.keyboardDismissMode = .interactive
-        textView.textContainerInset = .zero
+        textView.textContainerInset = UIEdgeInsets(top: 96, left: 0, bottom: 164, right: 0)
         textView.textContainer.lineFragmentPadding = 0
+        textView.scrollIndicatorInsets = UIEdgeInsets(top: 30, left: 0, bottom: 30, right: 0)
         textView.tintColor = MarkdownEditorStyler.accentColor
         textView.typingAttributes = MarkdownEditorStyler.baseTypingAttributes
         context.coordinator.applyStyledText(on: textView, value: text, force: true)
@@ -181,6 +214,7 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
                 location: min(selectedRange.location, textView.text.utf16.count),
                 length: min(selectedRange.length, max(textView.text.utf16.count - min(selectedRange.location, textView.text.utf16.count), 0))
             )
+            keepSelectionComfortablyVisible(in: textView)
             isApplyingUpdate = false
             lastFocusedParagraphRange = focusedParagraphRange
         }
@@ -196,6 +230,7 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
 
         func textViewDidBeginEditing(_ textView: UITextView) {
             isFocused = true
+            keepSelectionComfortablyVisible(in: textView)
         }
 
         func textViewDidEndEditing(_ textView: UITextView) {
@@ -213,6 +248,30 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
             }
 
             applyStyledText(on: textView, value: textView.text, force: true)
+        }
+
+        private func keepSelectionComfortablyVisible(in textView: UITextView) {
+            guard let selectedTextRange = textView.selectedTextRange else {
+                return
+            }
+
+            textView.layoutIfNeeded()
+            let caretRect = textView.caretRect(for: selectedTextRange.end)
+            guard caretRect.isNull == false else {
+                return
+            }
+
+            let comfortInset: CGFloat = 136
+            let visibleRect = textView.bounds.inset(by: UIEdgeInsets(top: comfortInset, left: 0, bottom: comfortInset, right: 0))
+            let caretPoint = CGPoint(x: max(caretRect.midX, 1), y: caretRect.midY)
+            guard visibleRect.contains(caretPoint) == false else {
+                return
+            }
+
+            let minOffsetY = -textView.adjustedContentInset.top
+            let maxOffsetY = max(textView.contentSize.height - textView.bounds.height + textView.adjustedContentInset.bottom, minOffsetY)
+            let targetOffsetY = min(max(caretRect.midY - (textView.bounds.height * 0.38), minOffsetY), maxOffsetY)
+            textView.setContentOffset(CGPoint(x: textView.contentOffset.x, y: targetOffsetY), animated: false)
         }
     }
 }
@@ -242,7 +301,7 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
         textView.isAutomaticQuoteSubstitutionEnabled = true
         textView.isAutomaticDashSubstitutionEnabled = true
         textView.isAutomaticSpellingCorrectionEnabled = true
-        textView.textContainerInset = NSSize(width: 0, height: 0)
+        textView.textContainerInset = NSSize(width: 0, height: 88)
         textView.textContainer?.lineFragmentPadding = 0
         textView.isHorizontallyResizable = false
         textView.isVerticallyResizable = true
@@ -254,6 +313,7 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
         textView.usesFindPanel = true
 
         scrollView.documentView = textView
+        scrollView.contentInsets = NSEdgeInsets(top: 8, left: 0, bottom: 72, right: 0)
         context.coordinator.applyStyledText(on: textView, value: text, force: true)
         return scrollView
     }
@@ -291,6 +351,7 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
             isApplyingUpdate = true
             textView.textStorage?.setAttributedString(MarkdownEditorStyler.attributedText(for: value, focusedRange: focusedParagraphRange))
             textView.setSelectedRanges(selectedRanges, affinity: .downstream, stillSelecting: false)
+            keepSelectionComfortablyVisible(in: textView)
             isApplyingUpdate = false
             lastFocusedParagraphRange = focusedParagraphRange
         }
@@ -307,6 +368,12 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
 
         func textDidBeginEditing(_ notification: Notification) {
             isFocused = true
+
+            guard let textView = notification.object as? NSTextView else {
+                return
+            }
+
+            keepSelectionComfortablyVisible(in: textView)
         }
 
         func textDidEndEditing(_ notification: Notification) {
@@ -326,6 +393,51 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
 
             applyStyledText(on: textView, value: textView.string, force: true)
         }
+
+        private func keepSelectionComfortablyVisible(in textView: NSTextView) {
+            guard let scrollView = textView.enclosingScrollView,
+                  let textContainer = textView.textContainer,
+                  let layoutManager = textView.layoutManager else {
+                return
+            }
+
+            layoutManager.ensureLayout(for: textContainer)
+
+            let selectedRange = textView.selectedRange()
+            let stringLength = (textView.string as NSString).length
+            let anchorLocation = min(max(selectedRange.location, 0), max(stringLength - 1, 0))
+            let anchorLength = min(max(selectedRange.length, 1), max(stringLength - anchorLocation, 1))
+            let anchorRange = stringLength == 0
+                ? NSRange(location: 0, length: 0)
+                : NSRange(location: anchorLocation, length: anchorLength)
+
+            var glyphRange = layoutManager.glyphRange(forCharacterRange: anchorRange, actualCharacterRange: nil)
+            if glyphRange.length == 0, layoutManager.numberOfGlyphs > 0 {
+                glyphRange = NSRange(location: min(glyphRange.location, layoutManager.numberOfGlyphs - 1), length: 1)
+            }
+
+            let caretRect: NSRect
+            if glyphRange.length > 0 {
+                var rect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
+                rect.origin.y += textView.textContainerInset.height
+                caretRect = rect
+            } else {
+                caretRect = NSRect(x: 0, y: textView.textContainerInset.height, width: 1, height: MarkdownEditorStyler.bodyLineHeight)
+            }
+
+            let comfortInset: CGFloat = 138
+            let visibleRect = scrollView.contentView.bounds.insetBy(dx: 0, dy: comfortInset)
+            let caretPoint = NSPoint(x: max(caretRect.midX, 1), y: caretRect.midY)
+            guard visibleRect.contains(caretPoint) == false else {
+                return
+            }
+
+            let minOffsetY = -scrollView.contentInsets.top
+            let maxOffsetY = max(textView.bounds.height - scrollView.contentView.bounds.height + scrollView.contentInsets.bottom, minOffsetY)
+            let targetOffsetY = min(max(caretRect.midY - (scrollView.contentView.bounds.height * 0.38), minOffsetY), maxOffsetY)
+            scrollView.contentView.setBoundsOrigin(NSPoint(x: 0, y: targetOffsetY))
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+        }
     }
 }
 #endif
@@ -341,6 +453,10 @@ private enum MarkdownEditorStyler {
 
     static var cursorColor: PlatformColor {
         textColor
+    }
+
+    static var bodyLineHeight: CGFloat {
+        bodyFont.pointSize + 11
     }
 
     static func attributedText(for text: String, focusedRange: NSRange? = nil) -> NSAttributedString {
