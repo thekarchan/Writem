@@ -11,17 +11,6 @@ struct FrontmatterPanelView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Frontmatter")
-                            .font(.title3.weight(.bold))
-                        Text("Form edits sync back into raw YAML at the top of the Markdown file.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                }
-
                 field(title: "Title", text: $frontmatter.title)
                 field(title: "Date", text: $frontmatter.date, prompt: "2026-03-11")
                 field(title: "Slug", text: $frontmatter.slug)
@@ -61,7 +50,7 @@ struct FrontmatterPanelView: View {
 
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Custom fields")
-                        .font(.headline)
+                        .font(.subheadline.weight(.semibold))
 
                     ForEach($frontmatter.customFields) { $field in
                         HStack(spacing: 12) {
@@ -117,4 +106,3 @@ struct FrontmatterPanelView: View {
         }
     }
 }
-

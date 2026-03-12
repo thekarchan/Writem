@@ -57,17 +57,9 @@ struct EditorRootView: View {
         } detail: {
             VStack(spacing: 0) {
                 header
-                EditorCanvasView(
-                    text: $document.text,
-                    lineWidth: settings.lineWidthPreset.width,
-                    onDropImageFiles: importImages(from:)
-                )
-                if let utilityPanel {
-                    Divider()
-                    utilityPanelView(utilityPanel)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 280)
-                        .background(Color.black.opacity(0.015))
+                GeometryReader { proxy in
+                    editorWorkspace(in: proxy.size)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 statusBar
             }
@@ -161,7 +153,7 @@ struct EditorRootView: View {
                         symbol: "slider.horizontal.3",
                         isActive: utilityPanel == .frontmatter
                     ) {
-                        utilityPanel = utilityPanel == .frontmatter ? nil : .frontmatter
+                        toggleUtilityPanel(.frontmatter)
                     }
 
                     toolbarButton(
@@ -169,7 +161,7 @@ struct EditorRootView: View {
                         symbol: "tablecells",
                         isActive: utilityPanel == .tables
                     ) {
-                        utilityPanel = utilityPanel == .tables ? nil : .tables
+                        toggleUtilityPanel(.tables)
                     }
 
                     Menu {
@@ -189,7 +181,7 @@ struct EditorRootView: View {
                         symbol: "checklist",
                         isActive: utilityPanel == .preflight
                     ) {
-                        utilityPanel = utilityPanel == .preflight ? nil : .preflight
+                        toggleUtilityPanel(.preflight)
                     }
 
                     toolbarButton(
@@ -197,7 +189,7 @@ struct EditorRootView: View {
                         symbol: "gearshape",
                         isActive: utilityPanel == .settings
                     ) {
-                        utilityPanel = utilityPanel == .settings ? nil : .settings
+                        toggleUtilityPanel(.settings)
                     }
                 }
 
@@ -255,31 +247,142 @@ struct EditorRootView: View {
     }
 
     @ViewBuilder
+    private func editorWorkspace(in size: CGSize) -> some View {
+        let usesPinnedSidebar = size.width >= 1080
+
+        if usesPinnedSidebar {
+            HStack(spacing: 18) {
+                EditorCanvasView(
+                    text: $document.text,
+                    lineWidth: settings.lineWidthPreset.width,
+                    onDropImageFiles: importImages(from:)
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                if let utilityPanel {
+                    utilitySidebar(for: utilityPanel)
+                        .frame(width: utilitySidebarWidth(for: size.width))
+                        .frame(maxHeight: .infinity)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 10)
+            .animation(.spring(response: 0.32, dampingFraction: 0.9), value: utilityPanel)
+        } else {
+            ZStack(alignment: .topTrailing) {
+                EditorCanvasView(
+                    text: $document.text,
+                    lineWidth: settings.lineWidthPreset.width,
+                    onDropImageFiles: importImages(from:)
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                if let utilityPanel {
+                    utilitySidebar(for: utilityPanel)
+                        .frame(width: floatingSidebarWidth(for: size.width))
+                        .padding(.top, 12)
+                        .padding(.trailing, 12)
+                        .padding(.bottom, 12)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
+            }
+            .animation(.spring(response: 0.32, dampingFraction: 0.9), value: utilityPanel)
+        }
+    }
+
+    @ViewBuilder
     private func utilityPanelView(_ panel: UtilityPanel) -> some View {
         switch panel {
         case .frontmatter:
             FrontmatterPanelView(frontmatter: $frontmatter) { updated in
                 document.text = FrontmatterParser.merge(updated, into: document.text)
             }
-            .padding(20)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 16)
         case .tables:
             TableEditorPanelView(markdown: document.text) { updatedMarkdown in
                 document.text = updatedMarkdown
             }
-            .padding(20)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 16)
         case .preflight:
             PreflightPanelView(issues: issues) { _ in
                 columnVisibility = .detailOnly
             }
-            .padding(20)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 16)
         case .settings:
             SettingsPanelView()
-                .padding(20)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 16)
         }
+    }
+
+    private func utilitySidebar(for panel: UtilityPanel) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Label(utilityPanelTitle(for: panel), systemImage: utilityPanelSymbol(for: panel))
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(Color(red: 0.34, green: 0.29, blue: 0.25))
+
+                Spacer()
+
+                Button {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.92)) {
+                        utilityPanel = nil
+                    }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color.secondary.opacity(0.8))
+                        .frame(width: 28, height: 28)
+                        .background(Color.white.opacity(0.52))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 14)
+            .padding(.bottom, 12)
+
+            Rectangle()
+                .fill(Color.black.opacity(0.05))
+                .frame(height: 1)
+
+            utilityPanelView(panel)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.82),
+                            Color(red: 0.985, green: 0.982, blue: 0.975).opacity(0.96)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color(red: 0.59, green: 0.54, blue: 0.49).opacity(0.14), lineWidth: 0.9)
+        }
+        .shadow(color: Color.black.opacity(0.03), radius: 18, x: 0, y: 8)
+        .shadow(color: Color(red: 0.41, green: 0.36, blue: 0.30).opacity(0.08), radius: 28, x: 0, y: 20)
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
     private func syncFrontmatter() {
         frontmatter = FrontmatterParser.parse(document.text)
+    }
+
+    private func toggleUtilityPanel(_ panel: UtilityPanel) {
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.92)) {
+            utilityPanel = utilityPanel == panel ? nil : panel
+        }
     }
 
     private func insert(snippet: Snippet) {
@@ -357,6 +460,40 @@ struct EditorRootView: View {
             endPoint: .bottomTrailing
         )
         .ignoresSafeArea()
+    }
+
+    private func utilitySidebarWidth(for availableWidth: CGFloat) -> CGFloat {
+        min(max(availableWidth * 0.27, 320), 380)
+    }
+
+    private func floatingSidebarWidth(for availableWidth: CGFloat) -> CGFloat {
+        min(max(availableWidth - 28, 280), 360)
+    }
+
+    private func utilityPanelTitle(for panel: UtilityPanel) -> String {
+        switch panel {
+        case .frontmatter:
+            return "Frontmatter"
+        case .preflight:
+            return "Checks"
+        case .tables:
+            return "Tables"
+        case .settings:
+            return "Settings"
+        }
+    }
+
+    private func utilityPanelSymbol(for panel: UtilityPanel) -> String {
+        switch panel {
+        case .frontmatter:
+            return "slider.horizontal.3"
+        case .preflight:
+            return "checklist"
+        case .tables:
+            return "tablecells"
+        case .settings:
+            return "gearshape"
+        }
     }
 
     private func toolbarDivider() -> some View {

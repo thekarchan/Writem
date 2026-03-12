@@ -15,17 +15,6 @@ struct TableEditorPanelView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Tables")
-                            .font(.title3.weight(.bold))
-                        Text("Edit Markdown tables visually while keeping the document source native.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                }
-
                 if tables.isEmpty {
                     emptyState
                 } else {
@@ -55,6 +44,9 @@ struct TableEditorPanelView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("No Markdown tables found in this document.")
                 .font(.headline)
+            Text("Insert a table or paste tabular content from Excel or the web.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
 
             HStack(spacing: 12) {
                 Button("Insert 3x3 Table") {

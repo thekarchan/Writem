@@ -15,19 +15,18 @@ struct PreflightPanelView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Preflight")
-                            .font(.title3.weight(.bold))
-                        Text("Run these checks before exporting or publishing.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
+                HStack(spacing: 10) {
+                    summaryChip(
+                        title: "\(errors) errors",
+                        symbol: "exclamationmark.triangle.fill",
+                        color: errors == 0 ? .secondary : .red
+                    )
+                    summaryChip(
+                        title: "\(warnings) warnings",
+                        symbol: "exclamationmark.circle",
+                        color: warnings == 0 ? .secondary : .orange
+                    )
                     Spacer()
-                    Label("\(errors) errors", systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(errors == 0 ? Color.secondary : Color.red)
-                    Label("\(warnings) warnings", systemImage: "exclamationmark.circle")
-                        .foregroundStyle(warnings == 0 ? Color.secondary : Color.orange)
                 }
 
                 if issues.isEmpty {
@@ -35,9 +34,6 @@ struct PreflightPanelView: View {
                         Label("No findings in the current document.", systemImage: "checkmark.seal.fill")
                             .font(.headline)
                             .foregroundStyle(.green)
-                        Text("This is the baseline check set. Later iterations can add filesystem-aware image validation and export checks.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
                     }
                     .padding(18)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -78,5 +74,17 @@ struct PreflightPanelView: View {
                 }
             }
         }
+    }
+
+    private func summaryChip(title: String, symbol: String, color: Color) -> some View {
+        Label(title, systemImage: symbol)
+            .font(.system(size: 11.5, weight: .semibold))
+            .foregroundStyle(color)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                Capsule()
+                    .fill(Color.white.opacity(0.68))
+            )
     }
 }

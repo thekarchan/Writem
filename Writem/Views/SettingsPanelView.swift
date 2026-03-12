@@ -6,17 +6,6 @@ struct SettingsPanelView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Settings")
-                            .font(.title3.weight(.bold))
-                        Text("Editor preferences are stored locally and can sync through iCloud when the capability is enabled.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                }
-
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Theme")
                         .font(.subheadline.weight(.semibold))
