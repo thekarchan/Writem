@@ -15,7 +15,7 @@ struct WritemApp: App {
         .commands {
             #if os(macOS)
             EditorFileCommands(session: session)
-            EditorEditCommands(settings: settings)
+            EditorViewCommands(settings: settings)
             #endif
         }
     }
@@ -73,11 +73,11 @@ private struct EditorFileCommands: Commands {
     }
 }
 
-private struct EditorEditCommands: Commands {
+private struct EditorViewCommands: Commands {
     @ObservedObject var settings: EditorSettingsStore
 
     var body: some Commands {
-        CommandGroup(after: .textEditing) {
+        CommandGroup(after: .toolbar) {
             Divider()
 
             Toggle(settings.showToolbar ? "Hide Toolbar" : "Show Toolbar", isOn: toolbarBinding)
