@@ -903,6 +903,10 @@ private enum MarkdownEditorStyler {
             return nil
         }
 
+        if let inlineContinuation = inlineBackspaceContinuation(in: text, replacementRange: replacementRange) {
+            return inlineContinuation
+        }
+
         let caretLocation = replacementRange.location + replacementRange.length
         let lineContext = activeLineContext(in: text, selectedRange: NSRange(location: caretLocation, length: 0))
         let lineText = lineSubstring(in: text, range: lineContext.lineRange)
@@ -969,6 +973,10 @@ private enum MarkdownEditorStyler {
         let clampedRange = clamped(selectedRange, maxLength: nsText.length)
 
         if let mutation = selectionWrapMutation(for: replacementText, in: nsText, selectedRange: clampedRange) {
+            return mutation
+        }
+
+        if let mutation = autoPairMutation(for: replacementText, in: nsText, selectedRange: clampedRange) {
             return mutation
         }
 
@@ -2054,6 +2062,8 @@ private enum MarkdownEditorStyler {
         switch replacementText {
         case "*":
             return inlineWrapMutation(in: text, selectedRange: selectedRange, wrapper: "*")
+        case "[":
+            return linkMutation(in: text, selectedRange: selectedRange)
         case "`":
             let selected = text.substring(with: selectedRange)
             if selected.contains("\n") {
@@ -2065,6 +2075,33 @@ private enum MarkdownEditorStyler {
                 )
             }
             return inlineWrapMutation(in: text, selectedRange: selectedRange, wrapper: "`")
+        default:
+            return nil
+        }
+    }
+
+    private static func autoPairMutation(for replacementText: String, in text: NSString, selectedRange: NSRange) -> CommandMutation? {
+        guard selectedRange.length == 0 else {
+            return nil
+        }
+
+        switch replacementText {
+        case "[":
+            return .init(
+                replacementRange: selectedRange,
+                replacementText: "[]()",
+                selectedRange: NSRange(location: selectedRange.location + 1, length: 0)
+            )
+        case "*":
+            guard shouldAutoPairStrongMarkers(in: text, selectedRange: selectedRange) else {
+                return nil
+            }
+
+            return .init(
+                replacementRange: NSRange(location: selectedRange.location - 1, length: 1),
+                replacementText: "****",
+                selectedRange: NSRange(location: selectedRange.location + 1, length: 0)
+            )
         default:
             return nil
         }
@@ -2172,6 +2209,74 @@ private enum MarkdownEditorStyler {
         let leadingWhitespace = String(repeating: " ", count: leadingWhitespaceCount(in: line))
         let normalized = leadingWhitespace + "\(number). \(content)"
         return (normalized, delimiter != "." || normalized != line)
+    }
+
+    private static func shouldAutoPairStrongMarkers(in text: NSString, selectedRange: NSRange) -> Bool {
+        guard selectedRange.location > 0 else {
+            return false
+        }
+
+        let previousRange = NSRange(location: selectedRange.location - 1, length: 1)
+        guard text.substring(with: previousRange) == "*" else {
+            return false
+        }
+
+        if selectedRange.location > 1 {
+            let secondPreviousRange = NSRange(location: selectedRange.location - 2, length: 1)
+            if text.substring(with: secondPreviousRange) == "*" {
+                return false
+            }
+        }
+
+        if selectedRange.location < text.length {
+            let nextRange = NSRange(location: selectedRange.location, length: 1)
+            if text.substring(with: nextRange) == "*" {
+                return false
+            }
+        }
+
+        return true
+    }
+
+    private static func inlineBackspaceContinuation(in text: String, replacementRange: NSRange) -> EnterContinuation? {
+        let nsText = text as NSString
+        let caretLocation = replacementRange.location + replacementRange.length
+
+        if let continuation = inlineBackspaceContinuation(in: nsText, caretLocation: caretLocation, pattern: "****", openingLength: 2) {
+            return continuation
+        }
+
+        if let continuation = inlineBackspaceContinuation(in: nsText, caretLocation: caretLocation, pattern: "``", openingLength: 1) {
+            return continuation
+        }
+
+        if let continuation = inlineBackspaceContinuation(in: nsText, caretLocation: caretLocation, pattern: "[]()", openingLength: 1) {
+            return continuation
+        }
+
+        return nil
+    }
+
+    private static func inlineBackspaceContinuation(
+        in text: NSString,
+        caretLocation: Int,
+        pattern: String,
+        openingLength: Int
+    ) -> EnterContinuation? {
+        let patternLength = (pattern as NSString).length
+        let start = caretLocation - openingLength
+
+        guard start >= 0,
+              start + patternLength <= text.length,
+              text.substring(with: NSRange(location: start, length: patternLength)) == pattern else {
+            return nil
+        }
+
+        return .init(
+            replacementRange: NSRange(location: start, length: patternLength),
+            replacementText: "",
+            caretLocation: start
+        )
     }
 
     private static func lineSubstring(in text: String, range: NSRange) -> String {
