@@ -54,11 +54,11 @@ struct EditorCanvasView: View {
             Spacer(minLength: 0)
             MarkdownWritingTextView(text: $text, isFocused: $shouldFocusEditor)
                 .frame(maxWidth: lineWidth, maxHeight: .infinity)
-                .padding(.top, 24)
-                .padding(.bottom, 18)
+                .padding(.top, 30)
+                .padding(.bottom, 26)
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 32)
+        .padding(.horizontal, 46)
     }
 }
 
@@ -68,15 +68,25 @@ private struct MarkdownWritingTextView: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.white.opacity(0.72))
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.97),
+                            Color(red: 0.998, green: 0.997, blue: 0.992)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .shadow(color: Color.black.opacity(0.035), radius: 14, x: 0, y: 6)
 
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Color.black.opacity(0.05), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .stroke(Color.black.opacity(0.035), lineWidth: 1)
 
             PlatformMarkdownTextView(text: $text, isFocused: $isFocused)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 10)
+                .padding(.horizontal, 28)
+                .padding(.vertical, 28)
         }
     }
 }
@@ -103,6 +113,7 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
         textView.keyboardDismissMode = .interactive
         textView.textContainerInset = .zero
         textView.textContainer.lineFragmentPadding = 0
+        textView.tintColor = MarkdownEditorStyler.accentColor
         textView.typingAttributes = MarkdownEditorStyler.baseTypingAttributes
         context.coordinator.applyStyledText(on: textView, value: text, force: true)
         return textView
@@ -176,6 +187,7 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
+        scrollView.scrollerStyle = .overlay
 
         let textView = NSTextView()
         textView.delegate = context.coordinator
@@ -194,6 +206,7 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
         textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
         textView.textContainer?.widthTracksTextView = true
         textView.insertionPointColor = MarkdownEditorStyler.cursorColor
+        textView.usesFindPanel = true
 
         scrollView.documentView = textView
         context.coordinator.applyStyledText(on: textView, value: text, force: true)
@@ -259,7 +272,8 @@ private enum MarkdownEditorStyler {
     static var baseTypingAttributes: [NSAttributedString.Key: Any] {
         [
             .font: bodyFont,
-            .foregroundColor: textColor
+            .foregroundColor: textColor,
+            .paragraphStyle: paragraphStyle(lineSpacing: 10, paragraphSpacing: 16)
         ]
     }
 
@@ -274,7 +288,7 @@ private enum MarkdownEditorStyler {
             [
                 .font: bodyFont,
                 .foregroundColor: textColor,
-                .paragraphStyle: paragraphStyle(lineSpacing: 8, paragraphSpacing: 18)
+                .paragraphStyle: paragraphStyle(lineSpacing: 10, paragraphSpacing: 16)
             ],
             range: fullRange
         )
@@ -356,7 +370,7 @@ private enum MarkdownEditorStyler {
                 [
                     .font: bodyFont,
                     .foregroundColor: textColor,
-                    .paragraphStyle: paragraphStyle(lineSpacing: 8, paragraphSpacing: 18)
+                    .paragraphStyle: paragraphStyle(lineSpacing: 10, paragraphSpacing: 16)
                 ],
                 range: lineRange
             )
@@ -382,7 +396,7 @@ private enum MarkdownEditorStyler {
             [
                 .font: monoFont(size: 13),
                 .foregroundColor: textColor,
-                .backgroundColor: subtleBackground
+                .backgroundColor: frontmatterBackground
             ],
             range: lineRange
         )
@@ -413,7 +427,7 @@ private enum MarkdownEditorStyler {
         if line.count > 3 {
             attributed.addAttributes(
                 [
-                    .foregroundColor: accentColor
+                    .foregroundColor: mutedColor
                 ],
                 range: NSRange(location: lineRange.location + 3, length: max(lineRange.length - 3, 0))
             )
@@ -426,7 +440,7 @@ private enum MarkdownEditorStyler {
                 .font: monoFont(size: 14),
                 .foregroundColor: codeTextColor,
                 .backgroundColor: codeBackground,
-                .paragraphStyle: paragraphStyle(lineSpacing: 4, paragraphSpacing: 10)
+                .paragraphStyle: paragraphStyle(lineSpacing: 5, paragraphSpacing: 10, firstLineHeadIndent: 18, headIndent: 18)
             ],
             range: lineRange
         )
@@ -451,7 +465,12 @@ private enum MarkdownEditorStyler {
             [
                 .font: headingFont(level: markerCount),
                 .foregroundColor: textColor,
-                .paragraphStyle: paragraphStyle(lineSpacing: 8, paragraphSpacing: 22 + CGFloat(max(0, 6 - markerCount)) * 2)
+                .paragraphStyle: paragraphStyle(
+                    lineSpacing: 10,
+                    paragraphSpacing: headingSpacing(level: markerCount),
+                    firstLineHeadIndent: 0,
+                    headIndent: 0
+                )
             ],
             range: lineRange
         )
@@ -491,7 +510,8 @@ private enum MarkdownEditorStyler {
             [
                 .font: bodyFont,
                 .foregroundColor: quoteColor,
-                .paragraphStyle: paragraphStyle(lineSpacing: 8, paragraphSpacing: 16, firstLineHeadIndent: 18, headIndent: 18)
+                .backgroundColor: quoteBackground,
+                .paragraphStyle: paragraphStyle(lineSpacing: 10, paragraphSpacing: 16, firstLineHeadIndent: 22, headIndent: 22)
             ],
             range: lineRange
         )
@@ -513,7 +533,7 @@ private enum MarkdownEditorStyler {
                 [
                     .font: bodyFont,
                     .foregroundColor: textColor,
-                    .paragraphStyle: paragraphStyle(lineSpacing: 8, paragraphSpacing: 12, firstLineHeadIndent: 18, headIndent: 18)
+                    .paragraphStyle: paragraphStyle(lineSpacing: 10, paragraphSpacing: 10, firstLineHeadIndent: 22, headIndent: 22)
                 ],
                 range: lineRange
             )
@@ -536,13 +556,13 @@ private enum MarkdownEditorStyler {
         }
 
         attributed.addAttributes(
-            [
-                .font: bodyFont,
-                .foregroundColor: textColor,
-                .paragraphStyle: paragraphStyle(lineSpacing: 8, paragraphSpacing: 12, firstLineHeadIndent: 24, headIndent: 24)
-            ],
-            range: lineRange
-        )
+                [
+                    .font: bodyFont,
+                    .foregroundColor: textColor,
+                    .paragraphStyle: paragraphStyle(lineSpacing: 10, paragraphSpacing: 10, firstLineHeadIndent: 28, headIndent: 28)
+                ],
+                range: lineRange
+            )
         attributed.addAttributes(
             [
                 .foregroundColor: accentColor
@@ -577,7 +597,7 @@ private enum MarkdownEditorStyler {
                 .font: monoFont(size: 14),
                 .foregroundColor: textColor,
                 .backgroundColor: tableBackground,
-                .paragraphStyle: paragraphStyle(lineSpacing: 6, paragraphSpacing: 10)
+                .paragraphStyle: paragraphStyle(lineSpacing: 7, paragraphSpacing: 10)
             ],
             range: lineRange
         )
@@ -639,7 +659,7 @@ private enum MarkdownEditorStyler {
                 [
                     .font: monoFont(size: inlineFontSize(attributed, range: innerRange)),
                     .foregroundColor: codeInlineColor,
-                    .backgroundColor: subtleBackground
+                    .backgroundColor: inlineCodeBackground
                 ],
                 range: innerRange
             )
@@ -786,23 +806,23 @@ private enum MarkdownEditorStyler {
     }
 
     private static var bodyFont: PlatformFont {
-        systemFont(size: 17, weight: .regular)
+        readingFont(size: 18, weight: .regular)
     }
 
     private static func headingFont(level: Int) -> PlatformFont {
         switch level {
         case 1:
-            return systemFont(size: 30, weight: .bold)
+            return readingFont(size: 33, weight: .bold)
         case 2:
-            return systemFont(size: 25, weight: .semibold)
+            return readingFont(size: 28, weight: .semibold)
         case 3:
-            return systemFont(size: 22, weight: .semibold)
+            return readingFont(size: 24, weight: .semibold)
         case 4:
-            return systemFont(size: 20, weight: .medium)
+            return readingFont(size: 21, weight: .medium)
         case 5:
-            return systemFont(size: 18, weight: .medium)
+            return readingFont(size: 19, weight: .medium)
         default:
-            return systemFont(size: 17, weight: .medium)
+            return readingFont(size: 18, weight: .medium)
         }
     }
 
@@ -814,6 +834,19 @@ private enum MarkdownEditorStyler {
             return 13
         default:
             return 12
+        }
+    }
+
+    private static func headingSpacing(level: Int) -> CGFloat {
+        switch level {
+        case 1:
+            return 28
+        case 2:
+            return 24
+        case 3:
+            return 20
+        default:
+            return 16
         }
     }
 
@@ -840,39 +873,51 @@ private enum MarkdownEditorStyler {
     }
 
     private static var syntaxColor: PlatformColor {
-        platformColor(red: 0.67, green: 0.67, blue: 0.64, alpha: 1)
+        platformColor(red: 0.73, green: 0.72, blue: 0.69, alpha: 1)
     }
 
     private static var accentColor: PlatformColor {
-        platformColor(red: 0.74, green: 0.42, blue: 0.30, alpha: 1)
+        platformColor(red: 0.63, green: 0.38, blue: 0.30, alpha: 1)
     }
 
     private static var quoteColor: PlatformColor {
-        platformColor(red: 0.39, green: 0.42, blue: 0.44, alpha: 1)
+        platformColor(red: 0.39, green: 0.41, blue: 0.42, alpha: 1)
     }
 
     private static var subtleBackground: PlatformColor {
         platformColor(red: 0.95, green: 0.95, blue: 0.93, alpha: 1)
     }
 
+    private static var frontmatterBackground: PlatformColor {
+        platformColor(red: 0.975, green: 0.973, blue: 0.966, alpha: 1)
+    }
+
+    private static var quoteBackground: PlatformColor {
+        platformColor(red: 0.982, green: 0.981, blue: 0.975, alpha: 1)
+    }
+
     private static var tableBackground: PlatformColor {
-        platformColor(red: 0.98, green: 0.97, blue: 0.95, alpha: 1)
+        platformColor(red: 0.985, green: 0.984, blue: 0.979, alpha: 1)
     }
 
     private static var codeBackground: PlatformColor {
-        platformColor(red: 0.15, green: 0.16, blue: 0.18, alpha: 1)
+        platformColor(red: 0.965, green: 0.962, blue: 0.954, alpha: 1)
     }
 
     private static var codeTextColor: PlatformColor {
-        platformColor(red: 0.92, green: 0.92, blue: 0.90, alpha: 1)
+        platformColor(red: 0.22, green: 0.23, blue: 0.24, alpha: 1)
     }
 
     private static var codeInlineColor: PlatformColor {
-        platformColor(red: 0.44, green: 0.23, blue: 0.20, alpha: 1)
+        platformColor(red: 0.37, green: 0.26, blue: 0.23, alpha: 1)
+    }
+
+    private static var inlineCodeBackground: PlatformColor {
+        platformColor(red: 0.95, green: 0.944, blue: 0.935, alpha: 1)
     }
 
     private static var linkColor: PlatformColor {
-        platformColor(red: 0.18, green: 0.36, blue: 0.62, alpha: 1)
+        platformColor(red: 0.23, green: 0.39, blue: 0.57, alpha: 1)
     }
 
     private static func monoFont(size: CGFloat) -> PlatformFont {
@@ -884,15 +929,15 @@ private enum MarkdownEditorStyler {
     }
 
     private static func boldFont(size: CGFloat) -> PlatformFont {
-        systemFont(size: size, weight: .semibold)
+        readingFont(size: size, weight: .semibold)
     }
 
     private static func italicFont(size: CGFloat) -> PlatformFont {
         #if canImport(AppKit)
-        let font = NSFont.systemFont(ofSize: size)
+        let font = readingFont(size: size, weight: .regular)
         return NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask)
         #else
-        let descriptor = UIFont.systemFont(ofSize: size).fontDescriptor.withSymbolicTraits(.traitItalic)
+        let descriptor = readingFont(size: size, weight: .regular).fontDescriptor.withSymbolicTraits(.traitItalic)
         return descriptor.map { UIFont(descriptor: $0, size: size) } ?? UIFont.italicSystemFont(ofSize: size)
         #endif
     }
@@ -902,6 +947,23 @@ private enum MarkdownEditorStyler {
         return .systemFont(ofSize: size, weight: weight)
         #else
         return .systemFont(ofSize: size, weight: weight)
+        #endif
+    }
+
+    private static func readingFont(size: CGFloat, weight: PlatformWeight) -> PlatformFont {
+        #if canImport(AppKit)
+        let base = NSFont.systemFont(ofSize: size, weight: weight)
+        if let descriptor = base.fontDescriptor.withDesign(.serif),
+           let font = NSFont(descriptor: descriptor, size: size) {
+            return font
+        }
+        return base
+        #else
+        let base = UIFont.systemFont(ofSize: size, weight: weight)
+        if let descriptor = base.fontDescriptor.withDesign(.serif) {
+            return UIFont(descriptor: descriptor, size: size)
+        }
+        return base
         #endif
     }
 
