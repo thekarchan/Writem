@@ -439,151 +439,106 @@ struct EditorRootView: View {
 
     @ViewBuilder
     private func editorWorkspace(in size: CGSize) -> some View {
-        let usesPinnedSidebar = size.width >= 1080
-        let horizontalPadding = 0.0
-        let verticalPadding = 0.0
+        ZStack(alignment: .topTrailing) {
+            editorCanvas
 
-        if usesPinnedSidebar {
-            HStack(spacing: 0) {
-                editorCanvas(forFloatingSidebar: false)
+            if let utilityPanel {
+                floatingSidebarBackdrop
+                    .transition(.opacity)
+                    .zIndex(1)
 
-                if let utilityPanel {
-                    utilitySidebar(for: utilityPanel)
-                        .frame(width: utilitySidebarWidth(for: size.width))
-                        .frame(maxHeight: .infinity)
-                        .transition(utilitySidebarTransition)
-                        .zIndex(2)
-                }
+                utilitySidebar(for: utilityPanel)
+                    .frame(width: utilitySidebarWidth(for: size.width))
+                    .padding(.top, settings.showToolbar ? 10 : 8)
+                    .padding(.trailing, 10)
+                    .padding(.bottom, 10)
+                    .transition(utilitySidebarTransition)
+                    .zIndex(2)
             }
-            .padding(.horizontal, horizontalPadding)
-            .padding(.vertical, verticalPadding)
-            .animation(.spring(response: 0.34, dampingFraction: 0.9), value: utilityPanel)
-        } else {
-            ZStack(alignment: .topTrailing) {
-                editorCanvas(forFloatingSidebar: true)
-
-                if let utilityPanel {
-                    floatingSidebarBackdrop
-                        .transition(.opacity)
-                        .zIndex(1)
-
-                    utilitySidebar(for: utilityPanel)
-                        .frame(width: floatingSidebarWidth(for: size.width))
-                        .padding(.top, 12)
-                        .padding(.trailing, 12)
-                        .padding(.bottom, 12)
-                        .transition(utilitySidebarTransition)
-                        .zIndex(2)
-                }
-            }
-            .animation(.spring(response: 0.34, dampingFraction: 0.9), value: utilityPanel)
         }
+        .animation(.spring(response: 0.3, dampingFraction: 0.92), value: utilityPanel)
     }
 
-    @ViewBuilder
     private func utilityPanelView(_ panel: UtilityPanel) -> some View {
-        switch panel {
-        case .frontmatter:
-            FrontmatterPanelView(frontmatter: $frontmatter) { updated in
-                session.text = FrontmatterParser.merge(updated, into: session.text)
+        Group {
+            switch panel {
+            case .frontmatter:
+                FrontmatterPanelView(frontmatter: $frontmatter) { updated in
+                    session.text = FrontmatterParser.merge(updated, into: session.text)
+                }
+            case .tables:
+                TableEditorPanelView(markdown: session.text) { updatedMarkdown in
+                    session.text = updatedMarkdown
+                }
+            case .preflight:
+                PreflightPanelView(issues: issues) { _ in
+                    columnVisibility = .detailOnly
+                }
+            case .settings:
+                SettingsPanelView()
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 16)
-        case .tables:
-            TableEditorPanelView(markdown: session.text) { updatedMarkdown in
-                session.text = updatedMarkdown
-            }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 16)
-        case .preflight:
-            PreflightPanelView(issues: issues) { _ in
-                columnVisibility = .detailOnly
-            }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 16)
-        case .settings:
-            SettingsPanelView()
-                .padding(.horizontal, 18)
-                .padding(.vertical, 16)
         }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
     }
 
     private func utilitySidebar(for panel: UtilityPanel) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 Label(utilityPanelTitle(for: panel), systemImage: utilityPanelSymbol(for: panel))
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundStyle(Color(red: 0.34, green: 0.29, blue: 0.25))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.86) : Color.black.opacity(0.72))
 
                 Spacer()
 
                 Button {
-                    withAnimation(.spring(response: 0.28, dampingFraction: 0.92)) {
-                        utilityPanel = nil
-                    }
+                    dismissUtilityPanel()
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Color.secondary.opacity(0.8))
-                        .frame(width: 28, height: 28)
-                        .background(Color.white.opacity(0.52))
-                        .clipShape(Circle())
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.68) : Color.black.opacity(0.54))
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 14)
-            .padding(.bottom, 12)
+            .padding(.horizontal, 14)
+            .padding(.top, 12)
+            .padding(.bottom, 10)
 
             Rectangle()
-                .fill(Color.black.opacity(0.05))
+                .fill(colorScheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.06))
                 .frame(height: 1)
 
             utilityPanelView(panel)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(
-                    LinearGradient(
-                        colors: [
-                            colorScheme == .dark
-                                ? Color(red: 0.125, green: 0.13, blue: 0.14).opacity(0.94)
-                                : Color.white.opacity(0.82),
-                            colorScheme == .dark
-                                ? Color(red: 0.10, green: 0.105, blue: 0.115).opacity(0.98)
-                                : Color(red: 0.985, green: 0.982, blue: 0.975).opacity(0.96)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
+                    colorScheme == .dark
+                        ? Color(red: 0.12, green: 0.125, blue: 0.135).opacity(0.94)
+                        : Color.white.opacity(0.86)
                 )
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(
                     colorScheme == .dark
-                        ? Color.white.opacity(0.08)
-                        : Color(red: 0.59, green: 0.54, blue: 0.49).opacity(0.14),
-                    lineWidth: 0.9
+                        ? Color.white.opacity(0.07)
+                        : Color.black.opacity(0.08),
+                    lineWidth: 0.8
                 )
         }
         .overlay(alignment: .leading) {
-            LinearGradient(
-                colors: [
-                    Color.white.opacity(0.58),
-                    Color.white.opacity(0)
-                ],
-                startPoint: .leading,
-                endPoint: .trailing
-            )
-            .frame(width: 18)
-            .padding(.vertical, 24)
-            .allowsHitTesting(false)
+            Rectangle()
+                .fill(colorScheme == .dark ? Color.white.opacity(0.03) : Color.white.opacity(0.5))
+                .frame(width: 1)
+                .padding(.vertical, 14)
+                .allowsHitTesting(false)
         }
-        .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.22 : 0.026), radius: 16, x: 0, y: 6)
-        .shadow(color: Color(red: 0.41, green: 0.36, blue: 0.30).opacity(colorScheme == .dark ? 0.18 : 0.09), radius: 30, x: -6, y: 18)
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.22 : 0.05), radius: 12, x: 0, y: 8)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     private func syncFrontmatter() {
@@ -827,7 +782,7 @@ struct EditorRootView: View {
         .ignoresSafeArea()
     }
 
-    private func editorCanvas(forFloatingSidebar: Bool) -> some View {
+    private var editorCanvas: some View {
         EditorCanvasView(
             text: $session.text,
             lineWidth: settings.lineWidthPreset.width,
@@ -839,22 +794,6 @@ struct EditorRootView: View {
             onCommandHandled: handleCanvasCommand
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .scaleEffect(utilityPanel == nil ? 1 : (forFloatingSidebar ? 0.996 : 0.998), anchor: .center)
-        .offset(x: utilityPanel == nil ? 0 : (forFloatingSidebar ? -8 : -4))
-        .overlay(alignment: .trailing) {
-            LinearGradient(
-                colors: utilityPanel == nil
-                    ? [Color.clear, Color.clear]
-                    : [
-                        Color.clear,
-                        Color(red: 0.58, green: 0.54, blue: 0.48).opacity(forFloatingSidebar ? 0.08 : 0.05)
-                    ],
-                startPoint: .leading,
-                endPoint: .trailing
-            )
-            .frame(width: forFloatingSidebar ? 120 : 80)
-            .allowsHitTesting(false)
-        }
     }
 
     private var floatingSidebarBackdrop: some View {
@@ -863,8 +802,8 @@ struct EditorRootView: View {
                 LinearGradient(
                     colors: [
                         Color.clear,
-                        Color.black.opacity(0.012),
-                        Color(red: 0.35, green: 0.31, blue: 0.28).opacity(0.04)
+                        Color.black.opacity(0.02),
+                        Color(red: 0.35, green: 0.31, blue: 0.28).opacity(0.06)
                     ],
                     startPoint: .leading,
                     endPoint: .trailing
@@ -888,11 +827,7 @@ struct EditorRootView: View {
     }
 
     private func utilitySidebarWidth(for availableWidth: CGFloat) -> CGFloat {
-        min(max(availableWidth * 0.27, 320), 380)
-    }
-
-    private func floatingSidebarWidth(for availableWidth: CGFloat) -> CGFloat {
-        min(max(availableWidth - 28, 280), 360)
+        min(max(availableWidth * 0.24, 300), 340)
     }
 
     private func utilityPanelTitle(for panel: UtilityPanel) -> String {
