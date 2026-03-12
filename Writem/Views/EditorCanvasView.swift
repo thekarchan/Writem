@@ -54,11 +54,11 @@ struct EditorCanvasView: View {
             Spacer(minLength: 0)
             MarkdownWritingTextView(text: $text, isFocused: $shouldFocusEditor)
                 .frame(maxWidth: lineWidth, maxHeight: .infinity)
-                .padding(.top, 30)
-                .padding(.bottom, 26)
+                .padding(.top, 36)
+                .padding(.bottom, 34)
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 46)
+        .padding(.horizontal, 38)
     }
 }
 
@@ -68,26 +68,55 @@ private struct MarkdownWritingTextView: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color.white.opacity(0.97),
-                            Color(red: 0.998, green: 0.997, blue: 0.992)
+                            Color(red: 0.58, green: 0.54, blue: 0.48).opacity(0.08),
+                            Color.black.opacity(0.015)
                         ],
                         startPoint: .top,
                         endPoint: .bottom
                     )
                 )
-                .shadow(color: Color.black.opacity(0.035), radius: 14, x: 0, y: 6)
+                .blur(radius: 24)
+                .scaleEffect(x: 0.96, y: 1.02)
+                .offset(y: 18)
 
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(Color.black.opacity(0.035), lineWidth: 1)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 1.0, green: 0.999, blue: 0.996),
+                            Color(red: 0.993, green: 0.991, blue: 0.985),
+                            Color(red: 0.989, green: 0.986, blue: 0.978)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .overlay(alignment: .top) {
+                    Rectangle()
+                        .fill(Color.white.opacity(0.75))
+                        .frame(height: 1)
+                        .padding(.horizontal, 20)
+                }
+                .shadow(color: Color.black.opacity(0.025), radius: 10, x: 0, y: 2)
+                .shadow(color: Color(red: 0.3, green: 0.28, blue: 0.23).opacity(0.08), radius: 22, x: 0, y: 14)
+
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .stroke(Color(red: 0.58, green: 0.54, blue: 0.48).opacity(0.16), lineWidth: 0.8)
+
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .stroke(Color.white.opacity(0.55), lineWidth: 0.6)
+                .padding(1.4)
 
             PlatformMarkdownTextView(text: $text, isFocused: $isFocused)
-                .padding(.horizontal, 28)
-                .padding(.vertical, 28)
+                .padding(.horizontal, 42)
+                .padding(.vertical, 40)
         }
+        .padding(.horizontal, 10)
+        .padding(.bottom, 8)
     }
 }
 
