@@ -10,12 +10,72 @@ private typealias PlatformFont = UIFont
 private typealias PlatformColor = UIColor
 #endif
 
+struct SlashCommandContext: Equatable {
+    let query: String
+    let replacementRange: NSRange
+    let leadingWhitespace: Int
+}
+
+struct EditorSlashCommand: Identifiable, Equatable {
+    let id: String
+    let title: String
+    let symbolName: String
+    let detail: String
+    let aliases: [String]
+    let snippet: Snippet
+
+    static let all: [EditorSlashCommand] = SnippetLibrary.all.map { snippet in
+        switch snippet.id {
+        case "heading":
+            return .init(id: snippet.id, title: "Heading", symbolName: snippet.symbolName, detail: "/heading", aliases: ["h1", "title", "section"], snippet: snippet)
+        case "list":
+            return .init(id: snippet.id, title: "Bullet List", symbolName: snippet.symbolName, detail: "/list", aliases: ["bullet", "ul", "points"], snippet: snippet)
+        case "quote":
+            return .init(id: snippet.id, title: "Quote", symbolName: snippet.symbolName, detail: "/quote", aliases: ["blockquote", "callout"], snippet: snippet)
+        case "code":
+            return .init(id: snippet.id, title: "Code Block", symbolName: snippet.symbolName, detail: "/code", aliases: ["fence", "snippet"], snippet: snippet)
+        case "table":
+            return .init(id: snippet.id, title: "Table", symbolName: snippet.symbolName, detail: "/table", aliases: ["grid", "spreadsheet"], snippet: snippet)
+        case "divider":
+            return .init(id: snippet.id, title: "Divider", symbolName: snippet.symbolName, detail: "/divider", aliases: ["hr", "rule", "separator"], snippet: snippet)
+        case "image":
+            return .init(id: snippet.id, title: "Image", symbolName: snippet.symbolName, detail: "/image", aliases: ["photo", "media", "figure"], snippet: snippet)
+        default:
+            return .init(id: snippet.id, title: snippet.title, symbolName: snippet.symbolName, detail: "/\(snippet.id)", aliases: [], snippet: snippet)
+        }
+    }
+
+    static func matching(query: String) -> [EditorSlashCommand] {
+        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else {
+            return all
+        }
+
+        return all.filter { command in
+            command.id.localizedCaseInsensitiveContains(normalized)
+                || command.title.localizedCaseInsensitiveContains(normalized)
+                || command.aliases.contains(where: { $0.localizedCaseInsensitiveContains(normalized) })
+        }
+    }
+
+    static func == (lhs: EditorSlashCommand, rhs: EditorSlashCommand) -> Bool {
+        lhs.id == rhs.id
+    }
+}
+
+struct EditorCanvasReplacement: Equatable {
+    let replacementRange: NSRange
+    let replacementText: String
+    let selectedRange: NSRange
+}
+
 struct EditorCanvasCommand: Identifiable, Equatable {
     enum Action: Equatable {
         case bold
         case italic
         case inlineCode
         case link
+        case replace(EditorCanvasReplacement)
     }
 
     let id = UUID()
@@ -32,6 +92,12 @@ struct EditorCanvasView: View {
 
     @State private var isImageDropTarget = false
     @State private var shouldFocusEditor = false
+    @State private var slashContext: SlashCommandContext?
+    @State private var pendingLocalCommand: EditorCanvasCommand?
+
+    private var activeCommand: EditorCanvasCommand? {
+        pendingLocalCommand ?? command
+    }
 
     var body: some View {
         centeredEditor
@@ -69,8 +135,11 @@ struct EditorCanvasView: View {
             MarkdownWritingTextView(
                 text: $text,
                 isFocused: $shouldFocusEditor,
-                command: command,
-                onCommandHandled: onCommandHandled
+                command: activeCommand,
+                onCommandHandled: handleCommandHandled,
+                slashContext: $slashContext,
+                visibleSlashCommands: visibleSlashCommands,
+                onSelectSlashCommand: issueSlashCommand
             )
                 .frame(maxWidth: lineWidth, maxHeight: .infinity)
                 .padding(.top, 24)
@@ -79,6 +148,28 @@ struct EditorCanvasView: View {
         }
         .padding(.horizontal, 32)
     }
+
+    private var visibleSlashCommands: [EditorSlashCommand] {
+        guard let slashContext else {
+            return []
+        }
+
+        return Array(EditorSlashCommand.matching(query: slashContext.query).prefix(6))
+    }
+
+    private func issueSlashCommand(_ slashCommand: EditorSlashCommand, context: SlashCommandContext) {
+        let replacement = MarkdownEditorStyler.replacement(for: slashCommand, context: context)
+        pendingLocalCommand = EditorCanvasCommand(action: .replace(replacement))
+    }
+
+    private func handleCommandHandled(_ commandID: UUID) {
+        if pendingLocalCommand?.id == commandID {
+            pendingLocalCommand = nil
+            return
+        }
+
+        onCommandHandled(commandID)
+    }
 }
 
 private struct MarkdownWritingTextView: View {
@@ -86,6 +177,9 @@ private struct MarkdownWritingTextView: View {
     @Binding var isFocused: Bool
     let command: EditorCanvasCommand?
     let onCommandHandled: (UUID) -> Void
+    @Binding var slashContext: SlashCommandContext?
+    let visibleSlashCommands: [EditorSlashCommand]
+    let onSelectSlashCommand: (EditorSlashCommand, SlashCommandContext) -> Void
 
     private var layoutProfile: WritingLayoutProfile {
         WritingLayoutProfile.current(for: text)
@@ -143,10 +237,24 @@ private struct MarkdownWritingTextView: View {
                 isFocused: $isFocused,
                 layoutProfile: layoutProfile,
                 command: command,
-                onCommandHandled: onCommandHandled
+                onCommandHandled: onCommandHandled,
+                slashContext: $slashContext
             )
                 .padding(.horizontal, 42)
                 .padding(.vertical, layoutProfile.pageVerticalPadding)
+        }
+        .overlay(alignment: .topLeading) {
+            if let slashContext {
+                SlashCommandPaletteView(
+                    commands: visibleSlashCommands,
+                    query: slashContext.query,
+                    onSelect: { command in
+                        onSelectSlashCommand(command, slashContext)
+                    }
+                )
+                .padding(.top, 26)
+                .padding(.leading, 30)
+            }
         }
         .overlay(alignment: .top) {
             pageEdgeFade(alignment: .top)
@@ -254,6 +362,84 @@ private struct WritingLayoutProfile {
     }
 }
 
+private struct SlashCommandPaletteView: View {
+    let commands: [EditorSlashCommand]
+    let query: String
+    let onSelect: (EditorSlashCommand) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "command")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color(red: 0.53, green: 0.47, blue: 0.42))
+                Text(query.isEmpty ? "Commands" : "/\(query)")
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(Color(red: 0.34, green: 0.29, blue: 0.25))
+            }
+
+            if commands.isEmpty {
+                Text("No matching commands")
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 8)
+            } else {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(commands) { command in
+                        Button {
+                            onSelect(command)
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: command.symbolName)
+                                    .font(.system(size: 12.5, weight: .semibold))
+                                    .frame(width: 18)
+                                    .foregroundStyle(Color(red: 0.52, green: 0.45, blue: 0.39))
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(command.title)
+                                        .font(.system(size: 12.5, weight: .medium))
+                                        .foregroundStyle(Color(red: 0.16, green: 0.15, blue: 0.14))
+                                    Text(command.detail)
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(width: 230, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.96),
+                            Color(red: 0.992, green: 0.989, blue: 0.982)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color(red: 0.58, green: 0.53, blue: 0.47).opacity(0.14), lineWidth: 0.8)
+        }
+        .shadow(color: Color.black.opacity(0.045), radius: 14, x: 0, y: 8)
+        .shadow(color: Color(red: 0.36, green: 0.31, blue: 0.27).opacity(0.08), radius: 28, x: 0, y: 14)
+    }
+}
+
 #if canImport(UIKit)
 private struct PlatformMarkdownTextView: UIViewRepresentable {
     @Binding var text: String
@@ -261,9 +447,10 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
     let layoutProfile: WritingLayoutProfile
     let command: EditorCanvasCommand?
     let onCommandHandled: (UUID) -> Void
+    @Binding var slashContext: SlashCommandContext?
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text, isFocused: $isFocused)
+        Coordinator(text: $text, isFocused: $isFocused, slashContext: $slashContext)
     }
 
     func makeUIView(context: Context) -> UITextView {
@@ -308,13 +495,15 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
     final class Coordinator: NSObject, UITextViewDelegate {
         @Binding private var text: String
         @Binding private var isFocused: Bool
+        @Binding private var slashContext: SlashCommandContext?
         private var isApplyingUpdate = false
         private var lastFocusedParagraphRange: NSRange?
         private var lastHandledCommandID: UUID?
 
-        init(text: Binding<String>, isFocused: Binding<Bool>) {
+        init(text: Binding<String>, isFocused: Binding<Bool>, slashContext: Binding<SlashCommandContext?>) {
             _text = text
             _isFocused = isFocused
+            _slashContext = slashContext
         }
 
         func applyStyledText(on textView: UITextView, value: String, selectedRange overrideSelectedRange: NSRange? = nil, force: Bool) {
@@ -335,11 +524,23 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
             keepSelectionComfortablyVisible(in: textView)
             isApplyingUpdate = false
             lastFocusedParagraphRange = focusedParagraphRange
+            updateSlashContext(for: value, selectedRange: clampedSelectedRange)
         }
 
         func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText: String) -> Bool {
             guard !isApplyingUpdate else {
                 return true
+            }
+
+            if replacementText == "\n",
+               let mutation = MarkdownEditorStyler.slashSubmitMutation(in: textView.text, selectedRange: range) {
+                applyMutation(
+                    on: textView,
+                    replacementRange: mutation.replacementRange,
+                    replacementText: mutation.replacementText,
+                    selectedRange: mutation.selectedRange
+                )
+                return false
             }
 
             if let mutation = MarkdownEditorStyler.typingMutation(for: replacementText, in: textView.text, selectedRange: range) {
@@ -383,6 +584,7 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
 
         func textViewDidEndEditing(_ textView: UITextView) {
             isFocused = false
+            slashContext = nil
         }
 
         func textViewDidChangeSelection(_ textView: UITextView) {
@@ -392,6 +594,7 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
 
             textView.typingAttributes = MarkdownEditorStyler.typingAttributes(for: textView.text, selectedRange: textView.selectedRange)
             let focusedParagraphRange = MarkdownEditorStyler.focusedParagraphRange(in: textView.text, selectedRange: textView.selectedRange)
+            updateSlashContext(for: textView.text, selectedRange: textView.selectedRange)
             guard focusedParagraphRange != lastFocusedParagraphRange else {
                 return
             }
@@ -467,6 +670,10 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
             text = updatedText
             applyStyledText(on: textView, value: updatedText, selectedRange: targetRange, force: true)
         }
+
+        private func updateSlashContext(for text: String, selectedRange: NSRange) {
+            slashContext = MarkdownEditorStyler.slashContext(in: text, selectedRange: selectedRange)
+        }
     }
 }
 #elseif canImport(AppKit)
@@ -476,9 +683,10 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
     let layoutProfile: WritingLayoutProfile
     let command: EditorCanvasCommand?
     let onCommandHandled: (UUID) -> Void
+    @Binding var slashContext: SlashCommandContext?
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text, isFocused: $isFocused)
+        Coordinator(text: $text, isFocused: $isFocused, slashContext: $slashContext)
     }
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -542,13 +750,15 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         @Binding private var text: String
         @Binding private var isFocused: Bool
+        @Binding private var slashContext: SlashCommandContext?
         private var isApplyingUpdate = false
         private var lastFocusedParagraphRange: NSRange?
         private var lastHandledCommandID: UUID?
 
-        init(text: Binding<String>, isFocused: Binding<Bool>) {
+        init(text: Binding<String>, isFocused: Binding<Bool>, slashContext: Binding<SlashCommandContext?>) {
             _text = text
             _isFocused = isFocused
+            _slashContext = slashContext
         }
 
         func applyStyledText(on textView: NSTextView, value: String, selectedRange overrideSelectedRange: NSRange? = nil, force: Bool) {
@@ -566,11 +776,23 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
             keepSelectionComfortablyVisible(in: textView)
             isApplyingUpdate = false
             lastFocusedParagraphRange = focusedParagraphRange
+            updateSlashContext(for: value, selectedRange: textView.selectedRange())
         }
 
         func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange, replacementString: String?) -> Bool {
             guard !isApplyingUpdate else {
                 return true
+            }
+
+            if replacementString == "\n",
+               let mutation = MarkdownEditorStyler.slashSubmitMutation(in: textView.string, selectedRange: affectedCharRange) {
+                applyMutation(
+                    on: textView,
+                    replacementRange: mutation.replacementRange,
+                    replacementText: mutation.replacementText,
+                    selectedRange: mutation.selectedRange
+                )
+                return false
             }
 
             if let replacementString,
@@ -621,6 +843,7 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
 
         func textDidEndEditing(_ notification: Notification) {
             isFocused = false
+            slashContext = nil
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {
@@ -631,6 +854,7 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
 
             textView.typingAttributes = MarkdownEditorStyler.typingAttributes(for: textView.string, selectedRange: textView.selectedRange())
             let focusedParagraphRange = MarkdownEditorStyler.focusedParagraphRange(in: textView.string, selectedRange: textView.selectedRange())
+            updateSlashContext(for: textView.string, selectedRange: textView.selectedRange())
             guard focusedParagraphRange != lastFocusedParagraphRange else {
                 return
             }
@@ -723,6 +947,10 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
             let targetRange = MarkdownEditorStyler.clamped(selectedRange, maxLength: updatedText.utf16.count)
             text = updatedText
             applyStyledText(on: textView, value: updatedText, selectedRange: targetRange, force: true)
+        }
+
+        private func updateSlashContext(for text: String, selectedRange: NSRange) {
+            slashContext = MarkdownEditorStyler.slashContext(in: text, selectedRange: selectedRange)
         }
     }
 }
@@ -957,6 +1185,12 @@ private enum MarkdownEditorStyler {
         let clampedRange = clamped(selectedRange, maxLength: nsText.length)
 
         switch action {
+        case let .replace(replacement):
+            return .init(
+                replacementRange: clamped(replacement.replacementRange, maxLength: nsText.length),
+                replacementText: replacement.replacementText,
+                selectedRange: replacement.selectedRange
+            )
         case .bold:
             return inlineWrapMutation(in: nsText, selectedRange: clampedRange, wrapper: "**")
         case .italic:
@@ -985,6 +1219,59 @@ private enum MarkdownEditorStyler {
         }
 
         return nil
+    }
+
+    static func slashSubmitMutation(in text: String, selectedRange: NSRange) -> CommandMutation? {
+        guard let slashContext = slashContext(in: text, selectedRange: selectedRange),
+              let command = EditorSlashCommand.matching(query: slashContext.query).first else {
+            return nil
+        }
+
+        return mutation(from: replacement(for: command, context: slashContext), textLength: text.utf16.count)
+    }
+
+    static func slashContext(in text: String, selectedRange: NSRange) -> SlashCommandContext? {
+        guard selectedRange.length == 0 else {
+            return nil
+        }
+
+        let lineContext = activeLineContext(in: text, selectedRange: selectedRange)
+        let line = lineSubstring(in: text, range: lineContext.lineRange)
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        let leadingWhitespace = leadingWhitespaceCount(in: line)
+        let cursorLocation = selectedRange.location
+        let lineEnd = lineContext.lineRange.location + lineContext.lineRange.length
+
+        guard trimmed.hasPrefix("/"),
+              cursorLocation == lineEnd else {
+            return nil
+        }
+
+        let query = String(trimmed.dropFirst())
+        guard query.contains(where: \.isWhitespace) == false else {
+            return nil
+        }
+
+        return .init(
+            query: query,
+            replacementRange: lineContext.lineRange,
+            leadingWhitespace: leadingWhitespace
+        )
+    }
+
+    static func replacement(for command: EditorSlashCommand, context: SlashCommandContext) -> EditorCanvasReplacement {
+        let indentation = String(repeating: " ", count: context.leadingWhitespace)
+        let indentedLines = command.snippet.content
+            .components(separatedBy: "\n")
+            .map { indentation + $0 }
+        let replacementText = indentedLines.joined(separator: "\n")
+        let replacementLength = (replacementText as NSString).length
+
+        return .init(
+            replacementRange: context.replacementRange,
+            replacementText: replacementText,
+            selectedRange: NSRange(location: context.replacementRange.location + replacementLength, length: 0)
+        )
     }
 
     static func attributedText(for text: String, focusedRange: NSRange? = nil) -> NSAttributedString {
@@ -2011,6 +2298,14 @@ private enum MarkdownEditorStyler {
         let location = min(max(range.location, 0), maxLength)
         let length = min(max(range.length, 0), max(maxLength - location, 0))
         return NSRange(location: location, length: length)
+    }
+
+    private static func mutation(from replacement: EditorCanvasReplacement, textLength: Int) -> CommandMutation {
+        .init(
+            replacementRange: clamped(replacement.replacementRange, maxLength: textLength),
+            replacementText: replacement.replacementText,
+            selectedRange: replacement.selectedRange
+        )
     }
 
     private static func inlineWrapMutation(in text: NSString, selectedRange: NSRange, wrapper: String) -> CommandMutation {
