@@ -5,6 +5,7 @@ Dates use the local repository commit date.
 
 ## 2026-03-12
 
+- Convert the outline sidebar into a lightweight overlay drawer
 - Turn utility panels into lightweight overlay drawers that no longer consume editor width
 - Add File menu recent documents and make the editor surface full-width editable
 - Add unsaved-changes confirmation before opening or replacing the current draft

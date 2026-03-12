@@ -21,7 +21,7 @@ struct EditorRootView: View {
         case openRecentDocument(String)
     }
 
-    @State private var columnVisibility: NavigationSplitViewVisibility = .detailOnly
+    @State private var isShowingOutline = false
     @State private var frontmatter: Frontmatter = .empty
     @State private var utilityPanel: UtilityPanel?
     @State private var isImportingDocument = false
@@ -87,11 +87,7 @@ struct EditorRootView: View {
     }
 
     var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
-            OutlineSidebarView(items: outline, issues: issues) { _ in
-                columnVisibility = .detailOnly
-            }
-        } detail: {
+        ZStack(alignment: .topLeading) {
             VStack(spacing: 0) {
                 if settings.showToolbar {
                     header
@@ -105,9 +101,22 @@ struct EditorRootView: View {
                 }
             }
             .background(editorBackground)
-            .navigationTitle(currentDocumentTitle)
+
+            if isShowingOutline {
+                outlineDrawerBackdrop
+                    .transition(.opacity)
+                    .zIndex(1)
+
+                outlineDrawer
+                    .frame(width: outlineDrawerWidth)
+                    .padding(.top, settings.showToolbar ? 10 : 8)
+                    .padding(.leading, 10)
+                    .padding(.bottom, 10)
+                    .transition(outlineDrawerTransition)
+                    .zIndex(2)
+            }
         }
-        .navigationSplitViewStyle(.balanced)
+        .navigationTitle(currentDocumentTitle)
         .onAppear {
             syncFrontmatter()
         }
@@ -221,6 +230,7 @@ struct EditorRootView: View {
             #endif
         }
         .preferredColorScheme(settings.resolvedColorScheme)
+        .animation(.spring(response: 0.3, dampingFraction: 0.92), value: isShowingOutline)
     }
 
     #if os(iOS)
@@ -264,14 +274,14 @@ struct EditorRootView: View {
                 menuBarButton(
                     title: "Outline",
                     symbol: "sidebar.left",
-                    isActive: columnVisibility != .detailOnly
+                    isActive: isShowingOutline
                 ) {
-                    columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
+                    toggleOutline()
                 }
 
                 Menu {
-                    Button(columnVisibility == .detailOnly ? "Show Outline" : "Hide Outline") {
-                        columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
+                    Button(isShowingOutline ? "Hide Outline" : "Show Outline") {
+                        toggleOutline()
                     }
 
                     Divider()
@@ -459,6 +469,67 @@ struct EditorRootView: View {
         .animation(.spring(response: 0.3, dampingFraction: 0.92), value: utilityPanel)
     }
 
+    private var outlineDrawer: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Label("Outline", systemImage: "sidebar.left")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.86) : Color.black.opacity(0.72))
+
+                Spacer()
+
+                Button {
+                    dismissOutline()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.68) : Color.black.opacity(0.54))
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 12)
+            .padding(.bottom, 10)
+
+            Rectangle()
+                .fill(colorScheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.06))
+                .frame(height: 1)
+
+            OutlineSidebarView(items: outline, issues: issues) { _ in
+                dismissOutline()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(
+                    colorScheme == .dark
+                        ? Color(red: 0.12, green: 0.125, blue: 0.135).opacity(0.94)
+                        : Color.white.opacity(0.86)
+                )
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(
+                    colorScheme == .dark
+                        ? Color.white.opacity(0.07)
+                        : Color.black.opacity(0.08),
+                    lineWidth: 0.8
+                )
+        }
+        .overlay(alignment: .trailing) {
+            Rectangle()
+                .fill(colorScheme == .dark ? Color.white.opacity(0.03) : Color.white.opacity(0.5))
+                .frame(width: 1)
+                .padding(.vertical, 14)
+                .allowsHitTesting(false)
+        }
+        .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.22 : 0.05), radius: 12, x: 0, y: 8)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
     private func utilityPanelView(_ panel: UtilityPanel) -> some View {
         Group {
             switch panel {
@@ -472,7 +543,7 @@ struct EditorRootView: View {
                 }
             case .preflight:
                 PreflightPanelView(issues: issues) { _ in
-                    columnVisibility = .detailOnly
+                    dismissOutline()
                 }
             case .settings:
                 SettingsPanelView()
@@ -543,6 +614,18 @@ struct EditorRootView: View {
 
     private func syncFrontmatter() {
         frontmatter = FrontmatterParser.parse(session.text)
+    }
+
+    private func toggleOutline() {
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.92)) {
+            isShowingOutline.toggle()
+        }
+    }
+
+    private func dismissOutline() {
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.92)) {
+            isShowingOutline = false
+        }
     }
 
     private func toggleUtilityPanel(_ panel: UtilityPanel) {
@@ -815,6 +898,25 @@ struct EditorRootView: View {
             }
     }
 
+    private var outlineDrawerBackdrop: some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.35, green: 0.31, blue: 0.28).opacity(0.06),
+                        Color.black.opacity(0.02),
+                        Color.clear
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .contentShape(Rectangle())
+            .onTapGesture {
+                dismissOutline()
+            }
+    }
+
     private var utilitySidebarTransition: AnyTransition {
         .asymmetric(
             insertion: .move(edge: .trailing)
@@ -826,8 +928,23 @@ struct EditorRootView: View {
         )
     }
 
+    private var outlineDrawerTransition: AnyTransition {
+        .asymmetric(
+            insertion: .move(edge: .leading)
+                .combined(with: .opacity)
+                .combined(with: .scale(scale: 0.985, anchor: .leading)),
+            removal: .move(edge: .leading)
+                .combined(with: .opacity)
+                .combined(with: .scale(scale: 0.985, anchor: .leading))
+        )
+    }
+
     private func utilitySidebarWidth(for availableWidth: CGFloat) -> CGFloat {
         min(max(availableWidth * 0.24, 300), 340)
+    }
+
+    private var outlineDrawerWidth: CGFloat {
+        300
     }
 
     private func utilityPanelTitle(for panel: UtilityPanel) -> String {
