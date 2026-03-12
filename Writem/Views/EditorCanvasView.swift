@@ -66,6 +66,10 @@ private struct MarkdownWritingTextView: View {
     @Binding var text: String
     @Binding var isFocused: Bool
 
+    private var layoutProfile: WritingLayoutProfile {
+        WritingLayoutProfile.current(for: text)
+    }
+
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -89,7 +93,9 @@ private struct MarkdownWritingTextView: View {
                         colors: [
                             Color(red: 1.0, green: 0.999, blue: 0.996),
                             Color(red: 0.993, green: 0.991, blue: 0.985),
-                            Color(red: 0.989, green: 0.986, blue: 0.978)
+                            layoutProfile.isBlank
+                                ? Color(red: 0.986, green: 0.983, blue: 0.976)
+                                : Color(red: 0.989, green: 0.986, blue: 0.978)
                         ],
                         startPoint: .top,
                         endPoint: .bottom
@@ -111,9 +117,9 @@ private struct MarkdownWritingTextView: View {
                 .stroke(Color.white.opacity(0.55), lineWidth: 0.6)
                 .padding(1.4)
 
-            PlatformMarkdownTextView(text: $text, isFocused: $isFocused)
+            PlatformMarkdownTextView(text: $text, isFocused: $isFocused, layoutProfile: layoutProfile)
                 .padding(.horizontal, 42)
-                .padding(.vertical, 18)
+                .padding(.vertical, layoutProfile.pageVerticalPadding)
         }
         .overlay(alignment: .top) {
             pageEdgeFade(alignment: .top)
@@ -146,9 +152,78 @@ private struct MarkdownWritingTextView: View {
                     endPoint: alignment == .top ? .bottom : .bottom
                 )
             )
-            .frame(height: alignment == .top ? 52 : 72)
+            .frame(height: alignment == .top ? layoutProfile.topFadeHeight : layoutProfile.bottomFadeHeight)
             .allowsHitTesting(false)
             .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+    }
+}
+
+private struct WritingLayoutProfile {
+    let isBlank: Bool
+    let topInset: CGFloat
+    let bottomInset: CGFloat
+    let scrollIndicatorTopInset: CGFloat
+    let scrollIndicatorBottomInset: CGFloat
+    let scrollViewTopInset: CGFloat
+    let scrollViewBottomInset: CGFloat
+    let comfortInset: CGFloat
+    let focusHeightRatio: CGFloat
+    let pageVerticalPadding: CGFloat
+    let topFadeHeight: CGFloat
+    let bottomFadeHeight: CGFloat
+
+    static func current(for text: String) -> Self {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lineCount = max(text.components(separatedBy: "\n").count, 1)
+
+        if trimmed.isEmpty {
+            return .init(
+                isBlank: true,
+                topInset: 148,
+                bottomInset: 224,
+                scrollIndicatorTopInset: 44,
+                scrollIndicatorBottomInset: 54,
+                scrollViewTopInset: 18,
+                scrollViewBottomInset: 92,
+                comfortInset: 172,
+                focusHeightRatio: 0.34,
+                pageVerticalPadding: 28,
+                topFadeHeight: 64,
+                bottomFadeHeight: 88
+            )
+        }
+
+        if trimmed.count < 220 && lineCount <= 5 {
+            return .init(
+                isBlank: false,
+                topInset: 118,
+                bottomInset: 194,
+                scrollIndicatorTopInset: 36,
+                scrollIndicatorBottomInset: 40,
+                scrollViewTopInset: 12,
+                scrollViewBottomInset: 82,
+                comfortInset: 148,
+                focusHeightRatio: 0.36,
+                pageVerticalPadding: 22,
+                topFadeHeight: 58,
+                bottomFadeHeight: 80
+            )
+        }
+
+        return .init(
+            isBlank: false,
+            topInset: 96,
+            bottomInset: 164,
+            scrollIndicatorTopInset: 30,
+            scrollIndicatorBottomInset: 30,
+            scrollViewTopInset: 8,
+            scrollViewBottomInset: 72,
+            comfortInset: 136,
+            focusHeightRatio: 0.38,
+            pageVerticalPadding: 18,
+            topFadeHeight: 52,
+            bottomFadeHeight: 72
+        )
     }
 }
 
@@ -156,6 +231,7 @@ private struct MarkdownWritingTextView: View {
 private struct PlatformMarkdownTextView: UIViewRepresentable {
     @Binding var text: String
     @Binding var isFocused: Bool
+    let layoutProfile: WritingLayoutProfile
 
     func makeCoordinator() -> Coordinator {
         Coordinator(text: $text, isFocused: $isFocused)
@@ -172,9 +248,8 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
         textView.smartDashesType = .yes
         textView.adjustsFontForContentSizeCategory = true
         textView.keyboardDismissMode = .interactive
-        textView.textContainerInset = UIEdgeInsets(top: 96, left: 0, bottom: 164, right: 0)
+        applyLayoutMetrics(to: textView, for: layoutProfile)
         textView.textContainer.lineFragmentPadding = 0
-        textView.scrollIndicatorInsets = UIEdgeInsets(top: 30, left: 0, bottom: 30, right: 0)
         textView.tintColor = MarkdownEditorStyler.accentColor
         textView.typingAttributes = MarkdownEditorStyler.baseTypingAttributes
         context.coordinator.applyStyledText(on: textView, value: text, force: true)
@@ -182,11 +257,22 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
     }
 
     func updateUIView(_ textView: UITextView, context: Context) {
+        applyLayoutMetrics(to: textView, for: layoutProfile)
         context.coordinator.applyStyledText(on: textView, value: text, force: textView.text != text)
 
         if isFocused, !textView.isFirstResponder {
             textView.becomeFirstResponder()
         }
+    }
+
+    private func applyLayoutMetrics(to textView: UITextView, for layoutProfile: WritingLayoutProfile) {
+        textView.textContainerInset = UIEdgeInsets(top: layoutProfile.topInset, left: 0, bottom: layoutProfile.bottomInset, right: 0)
+        textView.scrollIndicatorInsets = UIEdgeInsets(
+            top: layoutProfile.scrollIndicatorTopInset,
+            left: 0,
+            bottom: layoutProfile.scrollIndicatorBottomInset,
+            right: 0
+        )
     }
 
     final class Coordinator: NSObject, UITextViewDelegate {
@@ -261,7 +347,8 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
                 return
             }
 
-            let comfortInset: CGFloat = 136
+            let layoutProfile = WritingLayoutProfile.current(for: textView.text)
+            let comfortInset = layoutProfile.comfortInset
             let visibleRect = textView.bounds.inset(by: UIEdgeInsets(top: comfortInset, left: 0, bottom: comfortInset, right: 0))
             let caretPoint = CGPoint(x: max(caretRect.midX, 1), y: caretRect.midY)
             guard visibleRect.contains(caretPoint) == false else {
@@ -270,7 +357,7 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
 
             let minOffsetY = -textView.adjustedContentInset.top
             let maxOffsetY = max(textView.contentSize.height - textView.bounds.height + textView.adjustedContentInset.bottom, minOffsetY)
-            let targetOffsetY = min(max(caretRect.midY - (textView.bounds.height * 0.38), minOffsetY), maxOffsetY)
+            let targetOffsetY = min(max(caretRect.midY - (textView.bounds.height * layoutProfile.focusHeightRatio), minOffsetY), maxOffsetY)
             textView.setContentOffset(CGPoint(x: textView.contentOffset.x, y: targetOffsetY), animated: false)
         }
     }
@@ -279,6 +366,7 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
 private struct PlatformMarkdownTextView: NSViewRepresentable {
     @Binding var text: String
     @Binding var isFocused: Bool
+    let layoutProfile: WritingLayoutProfile
 
     func makeCoordinator() -> Coordinator {
         Coordinator(text: $text, isFocused: $isFocused)
@@ -301,7 +389,7 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
         textView.isAutomaticQuoteSubstitutionEnabled = true
         textView.isAutomaticDashSubstitutionEnabled = true
         textView.isAutomaticSpellingCorrectionEnabled = true
-        textView.textContainerInset = NSSize(width: 0, height: 88)
+        textView.textContainerInset = NSSize(width: 0, height: layoutProfile.topInset)
         textView.textContainer?.lineFragmentPadding = 0
         textView.isHorizontallyResizable = false
         textView.isVerticallyResizable = true
@@ -313,7 +401,7 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
         textView.usesFindPanel = true
 
         scrollView.documentView = textView
-        scrollView.contentInsets = NSEdgeInsets(top: 8, left: 0, bottom: 72, right: 0)
+        applyLayoutMetrics(to: scrollView, textView: textView, for: layoutProfile)
         context.coordinator.applyStyledText(on: textView, value: text, force: true)
         return scrollView
     }
@@ -323,11 +411,22 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
             return
         }
 
+        applyLayoutMetrics(to: scrollView, textView: textView, for: layoutProfile)
         context.coordinator.applyStyledText(on: textView, value: text, force: textView.string != text)
 
         if isFocused, textView.window?.firstResponder !== textView {
             textView.window?.makeFirstResponder(textView)
         }
+    }
+
+    private func applyLayoutMetrics(to scrollView: NSScrollView, textView: NSTextView, for layoutProfile: WritingLayoutProfile) {
+        textView.textContainerInset = NSSize(width: 0, height: layoutProfile.topInset)
+        scrollView.contentInsets = NSEdgeInsets(
+            top: layoutProfile.scrollViewTopInset,
+            left: 0,
+            bottom: layoutProfile.scrollViewBottomInset,
+            right: 0
+        )
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
@@ -425,7 +524,8 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
                 caretRect = NSRect(x: 0, y: textView.textContainerInset.height, width: 1, height: MarkdownEditorStyler.bodyLineHeight)
             }
 
-            let comfortInset: CGFloat = 138
+            let layoutProfile = WritingLayoutProfile.current(for: textView.string)
+            let comfortInset = layoutProfile.comfortInset
             let visibleRect = scrollView.contentView.bounds.insetBy(dx: 0, dy: comfortInset)
             let caretPoint = NSPoint(x: max(caretRect.midX, 1), y: caretRect.midY)
             guard visibleRect.contains(caretPoint) == false else {
@@ -434,7 +534,7 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
 
             let minOffsetY = -scrollView.contentInsets.top
             let maxOffsetY = max(textView.bounds.height - scrollView.contentView.bounds.height + scrollView.contentInsets.bottom, minOffsetY)
-            let targetOffsetY = min(max(caretRect.midY - (scrollView.contentView.bounds.height * 0.38), minOffsetY), maxOffsetY)
+            let targetOffsetY = min(max(caretRect.midY - (scrollView.contentView.bounds.height * layoutProfile.focusHeightRatio), minOffsetY), maxOffsetY)
             scrollView.contentView.setBoundsOrigin(NSPoint(x: 0, y: targetOffsetY))
             scrollView.reflectScrolledClipView(scrollView.contentView)
         }
