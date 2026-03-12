@@ -259,42 +259,38 @@ struct EditorRootView: View {
 
         if usesPinnedSidebar {
             HStack(spacing: 18) {
-                EditorCanvasView(
-                    text: $document.text,
-                    lineWidth: settings.lineWidthPreset.width,
-                    onDropImageFiles: importImages(from:)
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                editorCanvas(forFloatingSidebar: false)
 
                 if let utilityPanel {
                     utilitySidebar(for: utilityPanel)
                         .frame(width: utilitySidebarWidth(for: size.width))
                         .frame(maxHeight: .infinity)
-                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                        .transition(utilitySidebarTransition)
+                        .zIndex(2)
                 }
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 10)
-            .animation(.spring(response: 0.32, dampingFraction: 0.9), value: utilityPanel)
+            .animation(.spring(response: 0.34, dampingFraction: 0.9), value: utilityPanel)
         } else {
             ZStack(alignment: .topTrailing) {
-                EditorCanvasView(
-                    text: $document.text,
-                    lineWidth: settings.lineWidthPreset.width,
-                    onDropImageFiles: importImages(from:)
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                editorCanvas(forFloatingSidebar: true)
 
                 if let utilityPanel {
+                    floatingSidebarBackdrop
+                        .transition(.opacity)
+                        .zIndex(1)
+
                     utilitySidebar(for: utilityPanel)
                         .frame(width: floatingSidebarWidth(for: size.width))
                         .padding(.top, 12)
                         .padding(.trailing, 12)
                         .padding(.bottom, 12)
-                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                        .transition(utilitySidebarTransition)
+                        .zIndex(2)
                 }
             }
-            .animation(.spring(response: 0.32, dampingFraction: 0.9), value: utilityPanel)
+            .animation(.spring(response: 0.34, dampingFraction: 0.9), value: utilityPanel)
         }
     }
 
@@ -377,8 +373,21 @@ struct EditorRootView: View {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(Color(red: 0.59, green: 0.54, blue: 0.49).opacity(0.14), lineWidth: 0.9)
         }
-        .shadow(color: Color.black.opacity(0.03), radius: 18, x: 0, y: 8)
-        .shadow(color: Color(red: 0.41, green: 0.36, blue: 0.30).opacity(0.08), radius: 28, x: 0, y: 20)
+        .overlay(alignment: .leading) {
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.58),
+                    Color.white.opacity(0)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .frame(width: 18)
+            .padding(.vertical, 24)
+            .allowsHitTesting(false)
+        }
+        .shadow(color: Color.black.opacity(0.026), radius: 16, x: 0, y: 6)
+        .shadow(color: Color(red: 0.41, green: 0.36, blue: 0.30).opacity(0.09), radius: 30, x: -6, y: 18)
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
@@ -389,6 +398,12 @@ struct EditorRootView: View {
     private func toggleUtilityPanel(_ panel: UtilityPanel) {
         withAnimation(.spring(response: 0.28, dampingFraction: 0.92)) {
             utilityPanel = utilityPanel == panel ? nil : panel
+        }
+    }
+
+    private func dismissUtilityPanel() {
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.92)) {
+            utilityPanel = nil
         }
     }
 
@@ -467,6 +482,61 @@ struct EditorRootView: View {
             endPoint: .bottomTrailing
         )
         .ignoresSafeArea()
+    }
+
+    private func editorCanvas(forFloatingSidebar: Bool) -> some View {
+        EditorCanvasView(
+            text: $document.text,
+            lineWidth: settings.lineWidthPreset.width,
+            onDropImageFiles: importImages(from:)
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .scaleEffect(utilityPanel == nil ? 1 : (forFloatingSidebar ? 0.996 : 0.998), anchor: .center)
+        .offset(x: utilityPanel == nil ? 0 : (forFloatingSidebar ? -8 : -4))
+        .overlay(alignment: .trailing) {
+            LinearGradient(
+                colors: utilityPanel == nil
+                    ? [Color.clear, Color.clear]
+                    : [
+                        Color.clear,
+                        Color(red: 0.58, green: 0.54, blue: 0.48).opacity(forFloatingSidebar ? 0.08 : 0.05)
+                    ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .frame(width: forFloatingSidebar ? 120 : 80)
+            .allowsHitTesting(false)
+        }
+    }
+
+    private var floatingSidebarBackdrop: some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color.clear,
+                        Color.black.opacity(0.018),
+                        Color(red: 0.35, green: 0.31, blue: 0.28).opacity(0.06)
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .contentShape(Rectangle())
+            .onTapGesture {
+                dismissUtilityPanel()
+            }
+    }
+
+    private var utilitySidebarTransition: AnyTransition {
+        .asymmetric(
+            insertion: .move(edge: .trailing)
+                .combined(with: .opacity)
+                .combined(with: .scale(scale: 0.985, anchor: .trailing)),
+            removal: .move(edge: .trailing)
+                .combined(with: .opacity)
+                .combined(with: .scale(scale: 0.985, anchor: .trailing))
+        )
     }
 
     private func utilitySidebarWidth(for availableWidth: CGFloat) -> CGFloat {
