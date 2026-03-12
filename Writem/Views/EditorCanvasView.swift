@@ -335,7 +335,7 @@ private enum MarkdownEditorStyler {
         [
             .font: bodyFont,
             .foregroundColor: textColor,
-            .paragraphStyle: paragraphStyle(lineSpacing: 10, paragraphSpacing: 16)
+            .paragraphStyle: paragraphStyle(lineSpacing: 11, paragraphSpacing: 18)
         ]
     }
 
@@ -350,7 +350,7 @@ private enum MarkdownEditorStyler {
             [
                 .font: bodyFont,
                 .foregroundColor: textColor,
-                .paragraphStyle: paragraphStyle(lineSpacing: 10, paragraphSpacing: 16)
+                .paragraphStyle: paragraphStyle(lineSpacing: 11, paragraphSpacing: 18)
             ],
             range: fullRange
         )
@@ -432,7 +432,7 @@ private enum MarkdownEditorStyler {
                 [
                     .font: bodyFont,
                     .foregroundColor: textColor,
-                    .paragraphStyle: paragraphStyle(lineSpacing: 10, paragraphSpacing: 16)
+                    .paragraphStyle: paragraphStyle(lineSpacing: 11, paragraphSpacing: 18)
                 ],
                 range: lineRange
             )
@@ -470,7 +470,8 @@ private enum MarkdownEditorStyler {
             [
                 .font: monoFont(size: 13),
                 .foregroundColor: textColor,
-                .backgroundColor: frontmatterBackground
+                .backgroundColor: frontmatterBackground,
+                .paragraphStyle: paragraphStyle(lineSpacing: 7, paragraphSpacing: 4, firstLineHeadIndent: 10, headIndent: 10)
             ],
             range: lineRange
         )
@@ -493,7 +494,8 @@ private enum MarkdownEditorStyler {
             [
                 .font: monoFont(size: 12),
                 .foregroundColor: ghostSyntaxColor,
-                .backgroundColor: codeBackground
+                .backgroundColor: codeBackground,
+                .paragraphStyle: paragraphStyle(lineSpacing: 4, paragraphSpacing: 4, paragraphSpacingBefore: 8, firstLineHeadIndent: 18, headIndent: 18)
             ],
             range: lineRange
         )
@@ -511,10 +513,10 @@ private enum MarkdownEditorStyler {
     private static func styleCodeLine(in attributed: NSMutableAttributedString, lineRange: NSRange) {
         attributed.addAttributes(
             [
-                .font: monoFont(size: 14),
+                .font: monoFont(size: 13.5),
                 .foregroundColor: codeTextColor,
                 .backgroundColor: codeBackground,
-                .paragraphStyle: paragraphStyle(lineSpacing: 5, paragraphSpacing: 10, firstLineHeadIndent: 18, headIndent: 18)
+                .paragraphStyle: paragraphStyle(lineSpacing: 3, paragraphSpacing: 2, firstLineHeadIndent: 18, headIndent: 18)
             ],
             range: lineRange
         )
@@ -540,8 +542,9 @@ private enum MarkdownEditorStyler {
                 .font: headingFont(level: markerCount),
                 .foregroundColor: textColor,
                 .paragraphStyle: paragraphStyle(
-                    lineSpacing: 10,
-                    paragraphSpacing: headingSpacing(level: markerCount),
+                    lineSpacing: 8,
+                    paragraphSpacing: headingSpacingAfter(level: markerCount),
+                    paragraphSpacingBefore: headingSpacingBefore(level: markerCount),
                     firstLineHeadIndent: 0,
                     headIndent: 0
                 )
@@ -585,7 +588,7 @@ private enum MarkdownEditorStyler {
                 .font: bodyFont,
                 .foregroundColor: quoteColor,
                 .backgroundColor: quoteBackground,
-                .paragraphStyle: paragraphStyle(lineSpacing: 10, paragraphSpacing: 16, firstLineHeadIndent: 22, headIndent: 22)
+                .paragraphStyle: paragraphStyle(lineSpacing: 10, paragraphSpacing: 12, paragraphSpacingBefore: 6, firstLineHeadIndent: 24, headIndent: 24)
             ],
             range: lineRange
         )
@@ -607,7 +610,7 @@ private enum MarkdownEditorStyler {
                 [
                     .font: bodyFont,
                     .foregroundColor: textColor,
-                    .paragraphStyle: paragraphStyle(lineSpacing: 10, paragraphSpacing: 10, firstLineHeadIndent: 22, headIndent: 22)
+                    .paragraphStyle: paragraphStyle(lineSpacing: 10, paragraphSpacing: 8, paragraphSpacingBefore: 2, firstLineHeadIndent: 22, headIndent: 22)
                 ],
                 range: lineRange
             )
@@ -634,7 +637,7 @@ private enum MarkdownEditorStyler {
             [
                 .font: bodyFont,
                 .foregroundColor: textColor,
-                .paragraphStyle: paragraphStyle(lineSpacing: 10, paragraphSpacing: 10, firstLineHeadIndent: 28, headIndent: 28)
+                .paragraphStyle: paragraphStyle(lineSpacing: 10, paragraphSpacing: 8, paragraphSpacingBefore: 2, firstLineHeadIndent: 28, headIndent: 28)
                 ],
                 range: lineRange
             )
@@ -656,7 +659,8 @@ private enum MarkdownEditorStyler {
         attributed.addAttributes(
             [
                 .font: monoFont(size: 11),
-                .foregroundColor: ghostSyntaxColor
+                .foregroundColor: ghostSyntaxColor,
+                .paragraphStyle: paragraphStyle(lineSpacing: 0, paragraphSpacing: 12, paragraphSpacingBefore: 10)
             ],
             range: lineRange
         )
@@ -673,7 +677,7 @@ private enum MarkdownEditorStyler {
                 .font: monoFont(size: 14),
                 .foregroundColor: textColor,
                 .backgroundColor: tableBackground,
-                .paragraphStyle: paragraphStyle(lineSpacing: 7, paragraphSpacing: 10)
+                .paragraphStyle: paragraphStyle(lineSpacing: 5, paragraphSpacing: 4, paragraphSpacingBefore: 6)
             ],
             range: lineRange
         )
@@ -690,7 +694,8 @@ private enum MarkdownEditorStyler {
         attributed.addAttributes(
             [
                 .font: bodyFont,
-                .foregroundColor: textColor
+                .foregroundColor: textColor,
+                .paragraphStyle: paragraphStyle(lineSpacing: 11, paragraphSpacing: 14, paragraphSpacingBefore: 6)
             ],
             range: lineRange
         )
@@ -1001,28 +1006,43 @@ private enum MarkdownEditorStyler {
         }
     }
 
-    private static func headingSpacing(level: Int) -> CGFloat {
+    private static func headingSpacingBefore(level: Int) -> CGFloat {
         switch level {
         case 1:
-            return 28
-        case 2:
-            return 24
-        case 3:
             return 20
-        default:
+        case 2:
             return 16
+        case 3:
+            return 14
+        default:
+            return 10
+        }
+    }
+
+    private static func headingSpacingAfter(level: Int) -> CGFloat {
+        switch level {
+        case 1:
+            return 20
+        case 2:
+            return 16
+        case 3:
+            return 14
+        default:
+            return 10
         }
     }
 
     private static func paragraphStyle(
         lineSpacing: CGFloat,
         paragraphSpacing: CGFloat,
+        paragraphSpacingBefore: CGFloat = 0,
         firstLineHeadIndent: CGFloat = 0,
         headIndent: CGFloat = 0
     ) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.lineSpacing = lineSpacing
         style.paragraphSpacing = paragraphSpacing
+        style.paragraphSpacingBefore = paragraphSpacingBefore
         style.firstLineHeadIndent = firstLineHeadIndent
         style.headIndent = headIndent
         return style
