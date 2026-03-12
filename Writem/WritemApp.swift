@@ -16,8 +16,16 @@ struct WritemApp: App {
             #if os(macOS)
             EditorFileCommands(session: session)
             EditorViewCommands(settings: settings)
+            EditorHelpCommands()
             #endif
         }
+
+        #if os(macOS)
+        Window("Markdown Syntax", id: "markdown-syntax") {
+            MarkdownSyntaxHelpView()
+        }
+        .windowResizability(.contentSize)
+        #endif
     }
 }
 
@@ -126,6 +134,21 @@ private struct EditorViewCommands: Commands {
             Label(title, systemImage: "checkmark")
         } else {
             Text(title)
+        }
+    }
+}
+
+private struct EditorHelpCommands: Commands {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        CommandGroup(after: .help) {
+            Divider()
+
+            Button("Markdown Syntax Reference") {
+                openWindow(id: "markdown-syntax")
+            }
+            .keyboardShortcut("/", modifiers: [.command, .shift])
         }
     }
 }
