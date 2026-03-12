@@ -72,7 +72,7 @@ struct EditorRootView: View {
                 statusBar
             }
             .background(editorBackground)
-            .navigationTitle(frontmatter.title.isEmpty ? "Untitled Draft" : frontmatter.title)
+            .navigationTitle(frontmatter.title.isEmpty ? "Untitled" : frontmatter.title)
         }
         .navigationSplitViewStyle(.balanced)
         .onAppear {
