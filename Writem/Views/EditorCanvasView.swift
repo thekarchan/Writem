@@ -384,8 +384,8 @@ private enum MarkdownEditorStyler {
     private static func styleFrontmatterFence(in attributed: NSMutableAttributedString, lineRange: NSRange) {
         attributed.addAttributes(
             [
-                .font: monoFont(size: 13),
-                .foregroundColor: mutedColor
+                .font: monoFont(size: 12),
+                .foregroundColor: ghostSyntaxColor
             ],
             range: lineRange
         )
@@ -408,7 +408,7 @@ private enum MarkdownEditorStyler {
         let keyLength = line.distance(from: line.startIndex, to: separator)
         attributed.addAttributes(
             [
-                .foregroundColor: accentColor
+                .foregroundColor: structuralSyntaxColor
             ],
             range: NSRange(location: lineRange.location, length: keyLength)
         )
@@ -417,8 +417,8 @@ private enum MarkdownEditorStyler {
     private static func styleCodeFence(in attributed: NSMutableAttributedString, line: String, lineRange: NSRange) {
         attributed.addAttributes(
             [
-                .font: monoFont(size: 13),
-                .foregroundColor: mutedColor,
+                .font: monoFont(size: 12),
+                .foregroundColor: ghostSyntaxColor,
                 .backgroundColor: codeBackground
             ],
             range: lineRange
@@ -427,7 +427,7 @@ private enum MarkdownEditorStyler {
         if line.count > 3 {
             attributed.addAttributes(
                 [
-                    .foregroundColor: mutedColor
+                    .foregroundColor: faintSyntaxColor
                 ],
                 range: NSRange(location: lineRange.location + 3, length: max(lineRange.length - 3, 0))
             )
@@ -477,13 +477,13 @@ private enum MarkdownEditorStyler {
         attributed.addAttributes(
             [
                 .font: monoFont(size: headingMarkerSize(level: markerCount)),
-                .foregroundColor: syntaxColor
+                .foregroundColor: ghostSyntaxColor
             ],
             range: markerRange
         )
         attributed.addAttributes(
             [
-                .foregroundColor: syntaxColor
+                .foregroundColor: ghostSyntaxColor
             ],
             range: spacerRange
         )
@@ -517,7 +517,7 @@ private enum MarkdownEditorStyler {
         )
         attributed.addAttributes(
             [
-                .foregroundColor: syntaxColor
+                .foregroundColor: faintSyntaxColor
             ],
             range: markerRange
         )
@@ -539,7 +539,8 @@ private enum MarkdownEditorStyler {
             )
             attributed.addAttributes(
                 [
-                    .foregroundColor: accentColor
+                    .foregroundColor: faintSyntaxColor,
+                    .font: monoFont(size: 12)
                 ],
                 range: NSRange(location: lineRange.location + leadingWhitespace, length: 1)
             )
@@ -556,16 +557,17 @@ private enum MarkdownEditorStyler {
         }
 
         attributed.addAttributes(
-                [
-                    .font: bodyFont,
-                    .foregroundColor: textColor,
-                    .paragraphStyle: paragraphStyle(lineSpacing: 10, paragraphSpacing: 10, firstLineHeadIndent: 28, headIndent: 28)
+            [
+                .font: bodyFont,
+                .foregroundColor: textColor,
+                .paragraphStyle: paragraphStyle(lineSpacing: 10, paragraphSpacing: 10, firstLineHeadIndent: 28, headIndent: 28)
                 ],
                 range: lineRange
             )
         attributed.addAttributes(
             [
-                .foregroundColor: accentColor
+                .foregroundColor: faintSyntaxColor,
+                .font: monoFont(size: 12)
             ],
             range: NSRange(location: lineRange.location + leadingWhitespace, length: match.range.length)
         )
@@ -579,8 +581,8 @@ private enum MarkdownEditorStyler {
 
         attributed.addAttributes(
             [
-                .font: monoFont(size: 12),
-                .foregroundColor: syntaxColor
+                .font: monoFont(size: 11),
+                .foregroundColor: ghostSyntaxColor
             ],
             range: lineRange
         )
@@ -602,7 +604,7 @@ private enum MarkdownEditorStyler {
             range: lineRange
         )
 
-        highlightMatches(of: #"\|"#, in: line, lineRange: lineRange, attributed: attributed, color: syntaxColor)
+        highlightMatches(of: #"\|"#, in: line, lineRange: lineRange, attributed: attributed, color: ghostSyntaxColor)
         return true
     }
 
@@ -619,7 +621,19 @@ private enum MarkdownEditorStyler {
             range: lineRange
         )
 
-        highlightMatches(of: #"!?\[|\]|\(|\)"#, in: line, lineRange: lineRange, attributed: attributed, color: syntaxColor)
+        highlightMatches(of: #"!?\[|\]|\(|\)"#, in: line, lineRange: lineRange, attributed: attributed, color: ghostSyntaxColor)
+        highlightMatches(of: #"!\["#, in: line, lineRange: lineRange, attributed: attributed, color: faintSyntaxColor)
+        if let match = try? NSRegularExpression(pattern: #"\(([^)]+)\)"#).firstMatch(in: line, range: NSRange(location: 0, length: (line as NSString).length)),
+           match.numberOfRanges == 2 {
+            let urlRange = NSRange(location: lineRange.location + match.range(at: 1).location, length: match.range(at: 1).length)
+            attributed.addAttributes(
+                [
+                    .font: monoFont(size: 13),
+                    .foregroundColor: mutedColor
+                ],
+                range: urlRange
+            )
+        }
         return true
     }
 
@@ -645,13 +659,13 @@ private enum MarkdownEditorStyler {
 
             attributed.addAttributes(
                 [
-                    .foregroundColor: syntaxColor
+                    .foregroundColor: ghostSyntaxColor
                 ],
                 range: left
             )
             attributed.addAttributes(
                 [
-                    .foregroundColor: syntaxColor
+                    .foregroundColor: ghostSyntaxColor
                 ],
                 range: right
             )
@@ -683,7 +697,8 @@ private enum MarkdownEditorStyler {
             )
             attributed.addAttributes(
                 [
-                    .foregroundColor: mutedColor
+                    .foregroundColor: mutedColor,
+                    .font: monoFont(size: max(inlineFontSize(attributed, range: url) - 1, 12))
                 ],
                 range: url
             )
@@ -707,8 +722,8 @@ private enum MarkdownEditorStyler {
             let leading = NSRange(location: full.location, length: marker.count)
             let trailing = NSRange(location: full.location + full.length - marker.count, length: marker.count)
 
-            attributed.addAttributes([.foregroundColor: syntaxColor], range: leading)
-            attributed.addAttributes([.foregroundColor: syntaxColor], range: trailing)
+            attributed.addAttributes([.foregroundColor: ghostSyntaxColor], range: leading)
+            attributed.addAttributes([.foregroundColor: ghostSyntaxColor], range: trailing)
             attributed.addAttributes(
                 [
                     .font: boldFont(size: inlineFontSize(attributed, range: inner))
@@ -732,8 +747,8 @@ private enum MarkdownEditorStyler {
             let leading = NSRange(location: full.location, length: 1)
             let trailing = NSRange(location: full.location + full.length - 1, length: 1)
 
-            attributed.addAttributes([.foregroundColor: syntaxColor], range: leading)
-            attributed.addAttributes([.foregroundColor: syntaxColor], range: trailing)
+            attributed.addAttributes([.foregroundColor: ghostSyntaxColor], range: leading)
+            attributed.addAttributes([.foregroundColor: ghostSyntaxColor], range: trailing)
             attributed.addAttributes(
                 [
                     .font: italicFont(size: inlineFontSize(attributed, range: inner))
@@ -790,7 +805,7 @@ private enum MarkdownEditorStyler {
         let snippet = (attributed.string as NSString).substring(with: range)
         for (index, character) in snippet.enumerated() where "[]()".contains(character) {
             attributed.addAttributes(
-                [.foregroundColor: syntaxColor],
+                [.foregroundColor: ghostSyntaxColor],
                 range: NSRange(location: range.location + index, length: 1)
             )
         }
@@ -829,11 +844,11 @@ private enum MarkdownEditorStyler {
     private static func headingMarkerSize(level: Int) -> CGFloat {
         switch level {
         case 1:
-            return 14
+            return 11
         case 2:
-            return 13
+            return 10.5
         default:
-            return 12
+            return 10
         }
     }
 
@@ -872,8 +887,16 @@ private enum MarkdownEditorStyler {
         platformColor(red: 0.48, green: 0.48, blue: 0.46, alpha: 1)
     }
 
-    private static var syntaxColor: PlatformColor {
-        platformColor(red: 0.73, green: 0.72, blue: 0.69, alpha: 1)
+    static var faintSyntaxColor: PlatformColor {
+        platformColor(red: 0.79, green: 0.78, blue: 0.75, alpha: 1)
+    }
+
+    private static var ghostSyntaxColor: PlatformColor {
+        platformColor(red: 0.84, green: 0.83, blue: 0.80, alpha: 1)
+    }
+
+    private static var structuralSyntaxColor: PlatformColor {
+        platformColor(red: 0.54, green: 0.49, blue: 0.45, alpha: 1)
     }
 
     private static var accentColor: PlatformColor {
