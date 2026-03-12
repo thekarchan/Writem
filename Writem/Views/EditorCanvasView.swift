@@ -739,21 +739,25 @@ private enum MarkdownEditorStyler {
 
             attributed.addAttributes(
                 [
-                    .foregroundColor: ghostSyntaxColor
+                    .foregroundColor: ghostSyntaxColor,
+                    .font: monoFont(size: max(inlineFontSize(attributed, range: innerRange) - 3, 10))
                 ],
                 range: left
             )
             attributed.addAttributes(
                 [
-                    .foregroundColor: ghostSyntaxColor
+                    .foregroundColor: ghostSyntaxColor,
+                    .font: monoFont(size: max(inlineFontSize(attributed, range: innerRange) - 3, 10))
                 ],
                 range: right
             )
             attributed.addAttributes(
                 [
-                    .font: monoFont(size: inlineFontSize(attributed, range: innerRange)),
+                    .font: monoFont(size: max(inlineFontSize(attributed, range: innerRange) - 1.5, 13)),
                     .foregroundColor: codeInlineColor,
-                    .backgroundColor: inlineCodeBackground
+                    .backgroundColor: inlineCodeBackground,
+                    .baselineOffset: 0.4,
+                    .kern: 0.08
                 ],
                 range: innerRange
             )
@@ -771,7 +775,9 @@ private enum MarkdownEditorStyler {
 
             attributed.addAttributes(
                 [
-                    .foregroundColor: linkColor
+                    .foregroundColor: linkColor,
+                    .underlineStyle: NSUnderlineStyle.single.rawValue,
+                    .underlineColor: linkUnderlineColor
                 ],
                 range: label
             )
@@ -806,7 +812,9 @@ private enum MarkdownEditorStyler {
             attributed.addAttributes([.foregroundColor: ghostSyntaxColor], range: trailing)
             attributed.addAttributes(
                 [
-                    .font: boldFont(size: inlineFontSize(attributed, range: inner))
+                    .font: boldFont(size: inlineFontSize(attributed, range: inner)),
+                    .foregroundColor: strongTextColor,
+                    .kern: 0.05
                 ],
                 range: inner
             )
@@ -831,7 +839,8 @@ private enum MarkdownEditorStyler {
             attributed.addAttributes([.foregroundColor: ghostSyntaxColor], range: trailing)
             attributed.addAttributes(
                 [
-                    .font: italicFont(size: inlineFontSize(attributed, range: inner))
+                    .font: italicFont(size: inlineFontSize(attributed, range: inner)),
+                    .foregroundColor: emphasisTextColor
                 ],
                 range: inner
             )
@@ -1104,15 +1113,27 @@ private enum MarkdownEditorStyler {
     }
 
     private static var codeInlineColor: PlatformColor {
-        platformColor(red: 0.37, green: 0.26, blue: 0.23, alpha: 1)
+        platformColor(red: 0.34, green: 0.23, blue: 0.20, alpha: 1)
     }
 
     private static var inlineCodeBackground: PlatformColor {
-        platformColor(red: 0.95, green: 0.944, blue: 0.935, alpha: 1)
+        platformColor(red: 0.943, green: 0.936, blue: 0.926, alpha: 1)
     }
 
     private static var linkColor: PlatformColor {
-        platformColor(red: 0.23, green: 0.39, blue: 0.57, alpha: 1)
+        platformColor(red: 0.22, green: 0.36, blue: 0.50, alpha: 1)
+    }
+
+    private static var linkUnderlineColor: PlatformColor {
+        platformColor(red: 0.48, green: 0.60, blue: 0.70, alpha: 0.45)
+    }
+
+    private static var strongTextColor: PlatformColor {
+        platformColor(red: 0.11, green: 0.11, blue: 0.10, alpha: 1)
+    }
+
+    private static var emphasisTextColor: PlatformColor {
+        platformColor(red: 0.25, green: 0.24, blue: 0.22, alpha: 1)
     }
 
     private static func monoFont(size: CGFloat) -> PlatformFont {
