@@ -18,11 +18,9 @@ struct EditorRootView: View {
     @Binding var document: MarkdownFileDocument
     let fileURL: URL?
 
-    @State private var mode: EditorMode = .writing
     @State private var columnVisibility: NavigationSplitViewVisibility = .detailOnly
     @State private var frontmatter: Frontmatter = .empty
     @State private var utilityPanel: UtilityPanel?
-    @State private var jumpToLine: Int?
     @State private var isImportingImages = false
     @State private var editorAlert: EditorAlertState?
     @State private var lastImportedAsset: ImportedImageAsset?
@@ -53,28 +51,23 @@ struct EditorRootView: View {
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            OutlineSidebarView(items: outline, issues: issues) { item in
-                mode = .reading
-                jumpToLine = item.lineNumber
+            OutlineSidebarView(items: outline, issues: issues) { _ in
+                columnVisibility = .detailOnly
             }
         } detail: {
             VStack(spacing: 0) {
                 header
-                Divider()
                 EditorCanvasView(
                     text: $document.text,
-                    mode: mode,
                     lineWidth: settings.lineWidthPreset.width,
-                    documentURL: fileURL,
-                    jumpToLine: jumpToLine,
                     onDropImageFiles: importImages(from:)
                 )
                 if let utilityPanel {
                     Divider()
                     utilityPanelView(utilityPanel)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 300)
-                        .background(Color.white.opacity(0.58))
+                        .frame(height: 280)
+                        .background(Color.black.opacity(0.015))
                 }
                 statusBar
             }
@@ -122,139 +115,126 @@ struct EditorRootView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top, spacing: 16) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(frontmatter.title.isEmpty ? "Writem" : frontmatter.title)
-                        .font(.system(size: 28, weight: .bold, design: .serif))
-                    Text("Single-column Markdown editing for iPhone, iPad, and Mac.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                toolbarButton(
+                    title: columnVisibility == .detailOnly ? "Outline" : "Hide Outline",
+                    symbol: "sidebar.left",
+                    isActive: columnVisibility != .detailOnly
+                ) {
+                    columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
                 }
 
-                Spacer(minLength: 12)
-
-                Picker("Mode", selection: $mode) {
-                    ForEach(EditorMode.allCases) { item in
-                        Label(item.rawValue, systemImage: item.symbolName).tag(item)
+                Menu {
+                    ForEach(LineWidthPreset.allCases) { preset in
+                        Button(preset.title) {
+                            settings.lineWidthPreset = preset
+                        }
                     }
+                } label: {
+                    toolbarLabel(title: settings.lineWidthPreset.title, symbol: "arrow.left.and.right")
                 }
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 320)
-            }
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    pillButton(
-                        title: columnVisibility == .detailOnly ? "Outline" : "Hide Outline",
-                        symbol: "sidebar.left",
-                        tint: Color(red: 0.16, green: 0.22, blue: 0.30)
-                    ) {
-                        columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
-                    }
-
-                    Menu {
-                        ForEach(LineWidthPreset.allCases) { preset in
-                            Button(preset.title) {
-                                settings.lineWidthPreset = preset
-                            }
+                Menu {
+                    ForEach(SnippetLibrary.all) { snippet in
+                        Button {
+                            insert(snippet: snippet)
+                        } label: {
+                            Label(snippet.title, systemImage: snippet.symbolName)
                         }
-                    } label: {
-                        pillLabel(title: settings.lineWidthPreset.title, symbol: "arrow.left.and.right")
                     }
-
-                    Menu {
-                        ForEach(SnippetLibrary.all) { snippet in
-                            Button {
-                                insert(snippet: snippet)
-                            } label: {
-                                Label(snippet.title, systemImage: snippet.symbolName)
-                            }
-                        }
-                    } label: {
-                        pillLabel(title: "Insert", symbol: "plus.square.on.square")
-                    }
-
-                    pillButton(
-                        title: "Import Image",
-                        symbol: "photo.badge.plus",
-                        tint: Color(red: 0.13, green: 0.40, blue: 0.34)
-                    ) {
-                        isImportingImages = true
-                    }
-
-                    pillButton(
-                        title: "Frontmatter",
-                        symbol: "slider.horizontal.3",
-                        tint: Color(red: 0.34, green: 0.22, blue: 0.16)
-                    ) {
-                        utilityPanel = utilityPanel == .frontmatter ? nil : .frontmatter
-                    }
-
-                    pillButton(
-                        title: "Tables",
-                        symbol: "tablecells",
-                        tint: Color(red: 0.22, green: 0.34, blue: 0.56)
-                    ) {
-                        utilityPanel = utilityPanel == .tables ? nil : .tables
-                    }
-
-                    Menu {
-                        ForEach(ExportFormat.allCases) { format in
-                            Button {
-                                export(format)
-                            } label: {
-                                Label(format.title, systemImage: format.symbolName)
-                            }
-                        }
-                    } label: {
-                        pillLabel(title: "Export", symbol: "square.and.arrow.up")
-                    }
-
-                    pillButton(
-                        title: "Preflight \(errorCount)E/\(warningCount)W",
-                        symbol: "checklist",
-                        tint: Color(red: 0.60, green: 0.22, blue: 0.20)
-                    ) {
-                        utilityPanel = utilityPanel == .preflight ? nil : .preflight
-                    }
-
-                    pillButton(
-                        title: "Settings",
-                        symbol: "gearshape",
-                        tint: Color(red: 0.30, green: 0.30, blue: 0.36)
-                    ) {
-                        utilityPanel = utilityPanel == .settings ? nil : .settings
-                    }
+                } label: {
+                    toolbarLabel(title: "Insert", symbol: "plus.square")
                 }
-                .padding(.vertical, 1)
+
+                toolbarButton(title: "Image", symbol: "photo") {
+                    isImportingImages = true
+                }
+
+                toolbarButton(
+                    title: "Frontmatter",
+                    symbol: "slider.horizontal.3",
+                    isActive: utilityPanel == .frontmatter
+                ) {
+                    utilityPanel = utilityPanel == .frontmatter ? nil : .frontmatter
+                }
+
+                toolbarButton(
+                    title: "Tables",
+                    symbol: "tablecells",
+                    isActive: utilityPanel == .tables
+                ) {
+                    utilityPanel = utilityPanel == .tables ? nil : .tables
+                }
+
+                Menu {
+                    ForEach(ExportFormat.allCases) { format in
+                        Button {
+                            export(format)
+                        } label: {
+                            Label(format.title, systemImage: format.symbolName)
+                        }
+                    }
+                } label: {
+                    toolbarLabel(title: "Export", symbol: "square.and.arrow.up")
+                }
+
+                toolbarButton(
+                    title: "Checks \(errorCount)/\(warningCount)",
+                    symbol: "checklist",
+                    isActive: utilityPanel == .preflight
+                ) {
+                    utilityPanel = utilityPanel == .preflight ? nil : .preflight
+                }
+
+                toolbarButton(
+                    title: "Settings",
+                    symbol: "gearshape",
+                    isActive: utilityPanel == .settings
+                ) {
+                    utilityPanel = utilityPanel == .settings ? nil : .settings
+                }
             }
         }
-        .padding(.horizontal, 24)
-        .padding(.top, 20)
-        .padding(.bottom, 18)
-        .background(Color.white.opacity(0.68))
+        .padding(.horizontal, 26)
+        .padding(.vertical, 10)
+        .background(
+            Rectangle()
+                .fill(Color.white.opacity(0.86))
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(Color.black.opacity(0.06))
+                        .frame(height: 1)
+                }
+        )
     }
 
     private var statusBar: some View {
-        HStack(spacing: 18) {
+        HStack(spacing: 14) {
             Label("\(wordCount) words", systemImage: "text.word.spacing")
-            Label("\(outline.count) headings", systemImage: "list.bullet.indent")
+            Label("\(outline.count) headings", systemImage: "number")
             Label("\(issues.count) checks", systemImage: "checkmark.seal")
-            Label(settings.showCodeLineNumbers ? "Code lines on" : "Code lines off", systemImage: "number")
             if let lastImportedAsset {
                 Label(lastImportedAsset.relativePath, systemImage: "photo")
                     .lineLimit(1)
             } else if fileURL == nil {
-                Label("Save document to enable assets", systemImage: "externaldrive.badge.plus")
+                Label("Save to enable assets", systemImage: "externaldrive.badge.plus")
             }
         }
-        .font(.footnote)
+        .font(.caption)
         .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 24)
-        .padding(.vertical, 12)
-        .background(Color.white.opacity(0.38))
+        .padding(.horizontal, 28)
+        .padding(.vertical, 10)
+        .background(
+            Rectangle()
+                .fill(Color.white.opacity(0.7))
+                .overlay(alignment: .top) {
+                    Rectangle()
+                        .fill(Color.black.opacity(0.05))
+                        .frame(height: 1)
+                }
+        )
     }
 
     @ViewBuilder
@@ -271,11 +251,8 @@ struct EditorRootView: View {
             }
             .padding(20)
         case .preflight:
-            PreflightPanelView(issues: issues) { issue in
-                if let lineNumber = issue.lineNumber {
-                    mode = .reading
-                    jumpToLine = lineNumber
-                }
+            PreflightPanelView(issues: issues) { _ in
+                columnVisibility = .detailOnly
             }
             .padding(20)
         case .settings:
@@ -332,7 +309,6 @@ struct EditorRootView: View {
             let references = importedAssets.map(\.markdownReference)
             document.text = appendedMarkdownReferences(references, to: document.text)
             lastImportedAsset = importedAssets.last
-            mode = .writing
             return true
         } catch {
             editorAlert = .init(
@@ -357,8 +333,8 @@ struct EditorRootView: View {
     private var editorBackground: some View {
         LinearGradient(
             colors: [
-                Color(red: 0.95, green: 0.92, blue: 0.86),
-                Color(red: 0.99, green: 0.98, blue: 0.95)
+                Color(red: 0.975, green: 0.972, blue: 0.965),
+                Color.white
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
@@ -366,23 +342,22 @@ struct EditorRootView: View {
         .ignoresSafeArea()
     }
 
-    private func pillButton(title: String, symbol: String, tint: Color, action: @escaping () -> Void) -> some View {
+    private func toolbarButton(title: String, symbol: String, isActive: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            pillLabel(title: title, symbol: symbol)
+            toolbarLabel(title: title, symbol: symbol, isActive: isActive)
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 1)
-        .background(
-            Capsule()
-                .fill(tint.opacity(0.92))
-        )
-        .foregroundStyle(.white)
     }
 
-    private func pillLabel(title: String, symbol: String) -> some View {
+    private func toolbarLabel(title: String, symbol: String, isActive: Bool = false) -> some View {
         Label(title, systemImage: symbol)
-            .font(.subheadline.weight(.semibold))
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .font(.system(size: 13, weight: .medium))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .foregroundStyle(isActive ? Color.primary : Color.secondary)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(isActive ? Color.black.opacity(0.06) : Color.clear)
+            )
     }
 }
