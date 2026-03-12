@@ -342,6 +342,16 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
                 return true
             }
 
+            if let mutation = MarkdownEditorStyler.typingMutation(for: replacementText, in: textView.text, selectedRange: range) {
+                applyMutation(
+                    on: textView,
+                    replacementRange: mutation.replacementRange,
+                    replacementText: mutation.replacementText,
+                    selectedRange: mutation.selectedRange
+                )
+                return false
+            }
+
             if replacementText == "\n",
                let continuation = MarkdownEditorStyler.enterContinuation(in: textView.text, selectedRange: range) {
                 applyCustomEdit(on: textView, continuation: continuation)
@@ -561,6 +571,17 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
         func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange, replacementString: String?) -> Bool {
             guard !isApplyingUpdate else {
                 return true
+            }
+
+            if let replacementString,
+               let mutation = MarkdownEditorStyler.typingMutation(for: replacementString, in: textView.string, selectedRange: affectedCharRange) {
+                applyMutation(
+                    on: textView,
+                    replacementRange: mutation.replacementRange,
+                    replacementText: mutation.replacementText,
+                    selectedRange: mutation.selectedRange
+                )
+                return false
             }
 
             if replacementString == "\n",
@@ -941,6 +962,21 @@ private enum MarkdownEditorStyler {
         case .link:
             return linkMutation(in: nsText, selectedRange: clampedRange)
         }
+    }
+
+    static func typingMutation(for replacementText: String, in text: String, selectedRange: NSRange) -> CommandMutation? {
+        let nsText = text as NSString
+        let clampedRange = clamped(selectedRange, maxLength: nsText.length)
+
+        if let mutation = selectionWrapMutation(for: replacementText, in: nsText, selectedRange: clampedRange) {
+            return mutation
+        }
+
+        if let mutation = pasteMutation(for: replacementText, selectedRange: clampedRange) {
+            return mutation
+        }
+
+        return nil
     }
 
     static func attributedText(for text: String, focusedRange: NSRange? = nil) -> NSAttributedString {
@@ -2010,6 +2046,134 @@ private enum MarkdownEditorStyler {
         )
     }
 
+    private static func selectionWrapMutation(for replacementText: String, in text: NSString, selectedRange: NSRange) -> CommandMutation? {
+        guard selectedRange.length > 0 else {
+            return nil
+        }
+
+        switch replacementText {
+        case "*":
+            return inlineWrapMutation(in: text, selectedRange: selectedRange, wrapper: "*")
+        case "`":
+            let selected = text.substring(with: selectedRange)
+            if selected.contains("\n") {
+                let fenced = "```\n\(selected)\n```"
+                return .init(
+                    replacementRange: selectedRange,
+                    replacementText: fenced,
+                    selectedRange: NSRange(location: selectedRange.location + 4, length: selectedRange.length)
+                )
+            }
+            return inlineWrapMutation(in: text, selectedRange: selectedRange, wrapper: "`")
+        default:
+            return nil
+        }
+    }
+
+    private static func pasteMutation(for replacementText: String, selectedRange: NSRange) -> CommandMutation? {
+        let normalized = replacementText.replacingOccurrences(of: "\r\n", with: "\n")
+        guard normalized.contains("\n") || normalized.contains("\t") else {
+            return nil
+        }
+
+        if normalized.contains("\t"),
+           normalized.contains("\n"),
+           let table = MarkdownTable.fromDelimitedText(normalized) {
+            let markdown = table.markdown
+            let endLocation = selectedRange.location + (markdown as NSString).length
+            return .init(
+                replacementRange: selectedRange,
+                replacementText: markdown,
+                selectedRange: NSRange(location: endLocation, length: 0)
+            )
+        }
+
+        if let listMarkdown = normalizedListPaste(from: normalized) {
+            let endLocation = selectedRange.location + (listMarkdown as NSString).length
+            return .init(
+                replacementRange: selectedRange,
+                replacementText: listMarkdown,
+                selectedRange: NSRange(location: endLocation, length: 0)
+            )
+        }
+
+        return nil
+    }
+
+    private static func normalizedListPaste(from text: String) -> String? {
+        let lines = text.components(separatedBy: "\n")
+        var normalizedLines: [String] = []
+        var convertedLineCount = 0
+
+        for line in lines {
+            if line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                normalizedLines.append("")
+                continue
+            }
+
+            if let bulletLine = normalizedBulletLine(from: line) {
+                normalizedLines.append(bulletLine.line)
+                if bulletLine.changed {
+                    convertedLineCount += 1
+                }
+                continue
+            }
+
+            if let orderedLine = normalizedOrderedLine(from: line) {
+                normalizedLines.append(orderedLine.line)
+                if orderedLine.changed {
+                    convertedLineCount += 1
+                }
+                continue
+            }
+
+            return nil
+        }
+
+        guard convertedLineCount > 0 else {
+            return nil
+        }
+
+        return normalizedLines.joined(separator: "\n")
+    }
+
+    private static func normalizedBulletLine(from line: String) -> (line: String, changed: Bool)? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        let supportedMarkers: Set<Character> = ["-", "*", "+", "•", "·", "▪", "◦"]
+        guard let marker = trimmed.first,
+              supportedMarkers.contains(marker),
+              trimmed.dropFirst().first?.isWhitespace == true else {
+            return nil
+        }
+
+        let leadingWhitespace = String(repeating: " ", count: leadingWhitespaceCount(in: line))
+        let content = trimmed.dropFirst().drop { $0.isWhitespace }
+        let normalized = leadingWhitespace + "- " + String(content)
+        return (normalized, normalized != line)
+    }
+
+    private static func normalizedOrderedLine(from line: String) -> (line: String, changed: Bool)? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard let regex = try? NSRegularExpression(pattern: #"^(\d+)([.)])\s+(.+)$"#) else {
+            return nil
+        }
+
+        let searchRange = NSRange(location: 0, length: (trimmed as NSString).length)
+        guard let match = regex.firstMatch(in: trimmed, range: searchRange),
+              let numberRange = Range(match.range(at: 1), in: trimmed),
+              let delimiterRange = Range(match.range(at: 2), in: trimmed),
+              let contentRange = Range(match.range(at: 3), in: trimmed) else {
+            return nil
+        }
+
+        let number = String(trimmed[numberRange])
+        let delimiter = String(trimmed[delimiterRange])
+        let content = String(trimmed[contentRange])
+        let leadingWhitespace = String(repeating: " ", count: leadingWhitespaceCount(in: line))
+        let normalized = leadingWhitespace + "\(number). \(content)"
+        return (normalized, delimiter != "." || normalized != line)
+    }
+
     private static func lineSubstring(in text: String, range: NSRange) -> String {
         guard range.location != NSNotFound,
               let textRange = Range(range, in: text) else {
@@ -2230,7 +2394,7 @@ private enum MarkdownEditorStyler {
         platformColor(red: 0.54, green: 0.49, blue: 0.45, alpha: 1)
     }
 
-    private static var accentColor: PlatformColor {
+    fileprivate static var accentColor: PlatformColor {
         platformColor(red: 0.63, green: 0.38, blue: 0.30, alpha: 1)
     }
 
