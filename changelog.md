@@ -5,6 +5,7 @@ Dates use the local repository commit date.
 
 ## 2026-03-12
 
+- Add a layered-paper app icon set and wire AppIcon into both targets
 - Make the editor start writing from the top-left with minimal blank-page insets
 - Convert the outline sidebar into a lightweight overlay drawer
 - Turn utility panels into lightweight overlay drawers that no longer consume editor width
