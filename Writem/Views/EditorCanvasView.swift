@@ -26,10 +26,11 @@ struct EditorSlashTemplate: Identifiable, Equatable {
     let title: String
     let symbolName: String
     let detail: String
+    let aliases: [String]
     let action: SlashTemplateAction
 
     var searchTerms: [String] {
-        [title, detail]
+        [title, detail] + aliases
     }
 }
 
@@ -47,7 +48,7 @@ struct EditorSlashCommand: Identifiable, Equatable {
     }
 
     var searchTerms: [String] {
-        [id, title, detail] + aliases + secondaryTemplates.flatMap(\.searchTerms)
+        [id, title, detail] + aliases + ([primaryTemplate] + secondaryTemplates).flatMap(\.searchTerms)
     }
 
     static let all: [EditorSlashCommand] = [
@@ -56,18 +57,19 @@ struct EditorSlashCommand: Identifiable, Equatable {
             title: "Heading",
             symbolName: "textformat.size",
             detail: "/heading",
-            aliases: ["h1", "title", "section"],
+            aliases: ["h1", "title", "section", "header", "headline", "outline", "toc"],
             primaryTemplate: .insert(
                 id: "heading-h1",
                 title: "Heading 1",
                 symbolName: "textformat.size.larger",
                 detail: "# New section",
+                aliases: ["h1", "heading 1", "title", "main heading", "document title"],
                 content: "# New section"
             ),
             secondaryTemplates: [
-                .insert(id: "heading-h1", title: "Heading 1", symbolName: "textformat.size.larger", detail: "# New section", content: "# New section"),
-                .insert(id: "heading-h2", title: "Heading 2", symbolName: "textformat.size", detail: "## New subsection", content: "## New subsection"),
-                .insert(id: "heading-h3", title: "Heading 3", symbolName: "textformat", detail: "### Supporting point", content: "### Supporting point")
+                .insert(id: "heading-h1", title: "Heading 1", symbolName: "textformat.size.larger", detail: "# New section", aliases: ["h1", "heading 1", "title", "main heading", "document title"], content: "# New section"),
+                .insert(id: "heading-h2", title: "Heading 2", symbolName: "textformat.size", detail: "## New subsection", aliases: ["h2", "heading 2", "subheading", "section heading", "section title"], content: "## New subsection"),
+                .insert(id: "heading-h3", title: "Heading 3", symbolName: "textformat", detail: "### Supporting point", aliases: ["h3", "heading 3", "subsection", "supporting heading"], content: "### Supporting point")
             ]
         ),
         .init(
@@ -75,18 +77,19 @@ struct EditorSlashCommand: Identifiable, Equatable {
             title: "List",
             symbolName: "list.bullet",
             detail: "/list",
-            aliases: ["bullet", "ul", "points"],
+            aliases: ["bullet", "ul", "points", "ordered", "numbered", "checklist", "todo", "tasks"],
             primaryTemplate: .insert(
                 id: "list-bullets",
                 title: "Bullet List",
                 symbolName: "list.bullet",
                 detail: "- First point",
+                aliases: ["bullet list", "unordered list", "bullets", "list"],
                 content: "- First point\n- Second point\n- Third point"
             ),
             secondaryTemplates: [
-                .insert(id: "list-bullets", title: "Bullet List", symbolName: "list.bullet", detail: "- First point", content: "- First point\n- Second point\n- Third point"),
-                .insert(id: "list-numbered", title: "Numbered List", symbolName: "list.number", detail: "1. First step", content: "1. First step\n2. Second step\n3. Third step"),
-                .insert(id: "list-checklist", title: "Checklist", symbolName: "checklist", detail: "- [ ] First task", content: "- [ ] First task\n- [ ] Second task\n- [ ] Third task")
+                .insert(id: "list-bullets", title: "Bullet List", symbolName: "list.bullet", detail: "- First point", aliases: ["bullet list", "unordered list", "bullets", "list"], content: "- First point\n- Second point\n- Third point"),
+                .insert(id: "list-numbered", title: "Numbered List", symbolName: "list.number", detail: "1. First step", aliases: ["numbered list", "ordered list", "steps", "number list"], content: "1. First step\n2. Second step\n3. Third step"),
+                .insert(id: "list-checklist", title: "Checklist", symbolName: "checklist", detail: "- [ ] First task", aliases: ["checklist", "task list", "todo list", "todos", "checkboxes"], content: "- [ ] First task\n- [ ] Second task\n- [ ] Third task")
             ]
         ),
         .init(
@@ -94,18 +97,19 @@ struct EditorSlashCommand: Identifiable, Equatable {
             title: "Quote",
             symbolName: "text.quote",
             detail: "/quote",
-            aliases: ["blockquote", "callout"],
+            aliases: ["blockquote", "callout", "citation", "pull quote", "note"],
             primaryTemplate: .insert(
                 id: "quote-standard",
                 title: "Quote",
                 symbolName: "text.quote",
                 detail: "> A highlighted quote block",
+                aliases: ["quote block", "blockquote", "citation"],
                 content: "> A highlighted quote block"
             ),
             secondaryTemplates: [
-                .insert(id: "quote-standard", title: "Quote", symbolName: "text.quote", detail: "> A highlighted quote block", content: "> A highlighted quote block"),
-                .insert(id: "quote-note", title: "Note", symbolName: "note.text", detail: "> **Note:** Add supporting context", content: "> **Note:** Add supporting context"),
-                .insert(id: "quote-pull", title: "Pull Quote", symbolName: "quote.bubble", detail: "> Memorable line\n>\n> Author", content: "> Memorable line\n>\n> Author")
+                .insert(id: "quote-standard", title: "Quote", symbolName: "text.quote", detail: "> A highlighted quote block", aliases: ["quote block", "blockquote", "citation"], content: "> A highlighted quote block"),
+                .insert(id: "quote-note", title: "Note", symbolName: "note.text", detail: "> **Note:** Add supporting context", aliases: ["note", "callout", "admonition"], content: "> **Note:** Add supporting context"),
+                .insert(id: "quote-pull", title: "Pull Quote", symbolName: "quote.bubble", detail: "> Memorable line\n>\n> Author", aliases: ["pull quote", "highlighted quote", "testimonial"], content: "> Memorable line\n>\n> Author")
             ]
         ),
         .init(
@@ -113,20 +117,21 @@ struct EditorSlashCommand: Identifiable, Equatable {
             title: "Code Block",
             symbolName: "curlybraces",
             detail: "/code",
-            aliases: ["fence", "snippet"],
+            aliases: ["fence", "snippet", "code block", "terminal", "script", "source"],
             primaryTemplate: .insert(
                 id: "code-swift",
                 title: "Swift",
                 symbolName: "swift",
                 detail: "```swift",
+                aliases: ["swift", "swift code", "apple", "ios", "macos"],
                 content: "```swift\nprint(\"Hello, Writem\")\n```"
             ),
             secondaryTemplates: [
-                .insert(id: "code-swift", title: "Swift", symbolName: "swift", detail: "```swift", content: "```swift\nprint(\"Hello, Writem\")\n```"),
-                .insert(id: "code-js", title: "JavaScript", symbolName: "curlybraces.square", detail: "```js", content: "```js\nconsole.log(\"Hello, Writem\")\n```"),
-                .insert(id: "code-bash", title: "Shell", symbolName: "terminal", detail: "```bash", content: "```bash\nwritem build\n```"),
-                .insert(id: "code-json", title: "JSON", symbolName: "number.square", detail: "```json", content: "```json\n{\n  \"title\": \"Writem\"\n}\n```"),
-                .insert(id: "code-mermaid", title: "Mermaid", symbolName: "point.3.filled.connected.trianglepath.dotted", detail: "```mermaid", content: "```mermaid\ngraph TD\n    A[Start] --> B[Write]\n```")
+                .insert(id: "code-swift", title: "Swift", symbolName: "swift", detail: "```swift", aliases: ["swift", "swift code", "apple", "ios", "macos"], content: "```swift\nprint(\"Hello, Writem\")\n```"),
+                .insert(id: "code-js", title: "JavaScript", symbolName: "curlybraces.square", detail: "```js", aliases: ["javascript", "js", "node", "web script"], content: "```js\nconsole.log(\"Hello, Writem\")\n```"),
+                .insert(id: "code-bash", title: "Shell", symbolName: "terminal", detail: "```bash", aliases: ["shell", "bash", "sh", "terminal", "command line"], content: "```bash\nwritem build\n```"),
+                .insert(id: "code-json", title: "JSON", symbolName: "number.square", detail: "```json", aliases: ["json", "api response", "config json"], content: "```json\n{\n  \"title\": \"Writem\"\n}\n```"),
+                .insert(id: "code-mermaid", title: "Mermaid", symbolName: "point.3.filled.connected.trianglepath.dotted", detail: "```mermaid", aliases: ["mermaid", "diagram", "flowchart", "graph"], content: "```mermaid\ngraph TD\n    A[Start] --> B[Write]\n```")
             ]
         ),
         .init(
@@ -134,18 +139,19 @@ struct EditorSlashCommand: Identifiable, Equatable {
             title: "Table",
             symbolName: "tablecells",
             detail: "/table",
-            aliases: ["grid", "spreadsheet"],
+            aliases: ["grid", "spreadsheet", "columns", "comparison", "compare", "matrix"],
             primaryTemplate: .insert(
                 id: "table-basic",
                 title: "Two Columns",
                 symbolName: "tablecells",
                 detail: "| Column A | Column B |",
+                aliases: ["two columns", "2 columns", "simple table", "basic table"],
                 content: "| Column A | Column B |\n| --- | --- |\n| Value | Value |"
             ),
             secondaryTemplates: [
-                .insert(id: "table-basic", title: "Two Columns", symbolName: "tablecells", detail: "| Column A | Column B |", content: "| Column A | Column B |\n| --- | --- |\n| Value | Value |"),
-                .insert(id: "table-three", title: "Three Columns", symbolName: "square.split.3x1", detail: "| Column A | Column B | Column C |", content: "| Column A | Column B | Column C |\n| --- | --- | --- |\n| Value | Value | Value |"),
-                .insert(id: "table-compare", title: "Comparison", symbolName: "arrow.left.arrow.right.square", detail: "| Option | Pros | Cons |", content: "| Option | Pros | Cons |\n| --- | --- | --- |\n| A | Fast | Limited |\n| B | Flexible | More setup |")
+                .insert(id: "table-basic", title: "Two Columns", symbolName: "tablecells", detail: "| Column A | Column B |", aliases: ["two columns", "2 columns", "simple table", "basic table"], content: "| Column A | Column B |\n| --- | --- |\n| Value | Value |"),
+                .insert(id: "table-three", title: "Three Columns", symbolName: "square.split.3x1", detail: "| Column A | Column B | Column C |", aliases: ["three columns", "3 columns", "three column table"], content: "| Column A | Column B | Column C |\n| --- | --- | --- |\n| Value | Value | Value |"),
+                .insert(id: "table-compare", title: "Comparison", symbolName: "arrow.left.arrow.right.square", detail: "| Option | Pros | Cons |", aliases: ["comparison", "comparison table", "compare options", "pros and cons"], content: "| Option | Pros | Cons |\n| --- | --- | --- |\n| A | Fast | Limited |\n| B | Flexible | More setup |")
             ]
         ),
         .init(
@@ -153,12 +159,13 @@ struct EditorSlashCommand: Identifiable, Equatable {
             title: "Divider",
             symbolName: "minus",
             detail: "/divider",
-            aliases: ["hr", "rule", "separator"],
+            aliases: ["hr", "rule", "separator", "horizontal line", "page break"],
             primaryTemplate: .insert(
                 id: "divider-standard",
                 title: "Divider",
                 symbolName: "minus",
                 detail: "---",
+                aliases: ["divider", "rule", "separator", "horizontal line"],
                 content: "---"
             ),
             secondaryTemplates: []
@@ -168,12 +175,13 @@ struct EditorSlashCommand: Identifiable, Equatable {
             title: "Image",
             symbolName: "photo",
             detail: "/image",
-            aliases: ["photo", "media", "figure"],
+            aliases: ["photo", "media", "figure", "img", "pic", "picture", "screenshot", "illustration"],
             primaryTemplate: .imageImport(
                 id: "image-import",
                 title: "Import Image",
                 symbolName: "photo.badge.plus",
-                detail: "Open the image picker"
+                detail: "Open the image picker",
+                aliases: ["image", "img", "pic", "picture", "photo", "screenshot", "insert image", "add image"]
             ),
             secondaryTemplates: []
         )
@@ -198,12 +206,12 @@ struct EditorSlashCommand: Identifiable, Equatable {
 }
 
 private extension EditorSlashTemplate {
-    static func insert(id: String, title: String, symbolName: String, detail: String, content: String) -> Self {
-        .init(id: id, title: title, symbolName: symbolName, detail: detail, action: .insert(content))
+    static func insert(id: String, title: String, symbolName: String, detail: String, aliases: [String] = [], content: String) -> Self {
+        .init(id: id, title: title, symbolName: symbolName, detail: detail, aliases: aliases, action: .insert(content))
     }
 
-    static func imageImport(id: String, title: String, symbolName: String, detail: String) -> Self {
-        .init(id: id, title: title, symbolName: symbolName, detail: detail, action: .requestImageImport)
+    static func imageImport(id: String, title: String, symbolName: String, detail: String, aliases: [String] = []) -> Self {
+        .init(id: id, title: title, symbolName: symbolName, detail: detail, aliases: aliases, action: .requestImageImport)
     }
 }
 
@@ -283,6 +291,36 @@ private final class SlashUsageStore: ObservableObject {
 }
 
 private enum SlashPaletteSearch {
+    private static let ignoredQueryTokens: Set<String> = [
+        "a", "an", "the", "to", "for", "of", "my", "some",
+        "add", "insert", "create", "make", "new", "open", "show", "use", "please"
+    ]
+
+    private static let tokenSynonyms: [String: [String]] = [
+        "img": ["image", "photo", "picture", "pic"],
+        "pic": ["image", "photo", "picture", "pic"],
+        "photo": ["image", "photo", "picture"],
+        "picture": ["image", "photo", "picture"],
+        "screenshot": ["image", "screenshot", "photo"],
+        "toc": ["toc", "outline", "heading"],
+        "h1": ["h1", "heading 1", "title"],
+        "h2": ["h2", "heading 2", "subheading"],
+        "h3": ["h3", "heading 3", "subsection"],
+        "js": ["js", "javascript"],
+        "json": ["json", "config", "api"],
+        "sh": ["sh", "shell", "bash"],
+        "shell": ["shell", "bash", "terminal"],
+        "todo": ["todo", "checklist", "task list"],
+        "todos": ["todo", "checklist", "task list"],
+        "task": ["task", "checklist", "task list"],
+        "ordered": ["ordered", "numbered"],
+        "numbered": ["numbered", "ordered"],
+        "hr": ["divider", "rule", "separator"],
+        "sep": ["separator", "divider"],
+        "compare": ["compare", "comparison"],
+        "grid": ["grid", "table"]
+    ]
+
     private struct RankedCommand {
         let command: EditorSlashCommand
         let matchScore: Int
@@ -385,20 +423,58 @@ private enum SlashPaletteSearch {
         compositeScore(for: template.searchTerms, query: query)
     }
 
+    static func bestMatchingTemplate(in command: EditorSlashCommand, query: String) -> EditorSlashTemplate? {
+        let normalizedQuery = normalize(query)
+        guard !normalizedQuery.isEmpty else {
+            return nil
+        }
+
+        let candidates = command.secondaryTemplates.isEmpty ? [command.primaryTemplate] : command.secondaryTemplates
+
+        return Array(candidates.enumerated())
+            .compactMap { item in
+                guard let matchScore = templateScore(for: item.element, query: normalizedQuery) else {
+                    return nil
+                }
+
+                return RankedTemplate(
+                    template: item.element,
+                    matchScore: matchScore,
+                    recency: 0,
+                    index: item.offset
+                )
+            }
+            .sorted { (lhs: RankedTemplate, rhs: RankedTemplate) in
+                if lhs.matchScore != rhs.matchScore {
+                    return lhs.matchScore > rhs.matchScore
+                }
+                return lhs.index < rhs.index
+            }
+            .first?
+            .template
+    }
+
+    static func suppressionKey(for query: String) -> String {
+        normalize(query)
+    }
+
     private static func compositeScore(for terms: [String], query: String) -> Int? {
         guard !query.isEmpty else {
             return 0
         }
 
-        let tokens = query.split(whereSeparator: \.isWhitespace).map(String.init)
-        guard !tokens.isEmpty else {
+        let tokenGroups = queryTokenGroups(for: query)
+        guard !tokenGroups.isEmpty else {
             return 0
         }
 
         var totalScore = 0
 
-        for token in tokens {
-            let bestTokenScore = terms.compactMap { score(token: token, against: $0) }.max()
+        for tokenGroup in tokenGroups {
+            let bestTokenScore = terms.compactMap { term in
+                tokenGroup.compactMap { score(token: $0, against: term) }.max()
+            }.max()
+
             guard let bestTokenScore else {
                 return nil
             }
@@ -406,6 +482,20 @@ private enum SlashPaletteSearch {
         }
 
         return totalScore
+    }
+
+    private static func queryTokenGroups(for query: String) -> [[String]] {
+        let tokens = query
+            .split(whereSeparator: { $0.isWhitespace || $0 == "/" })
+            .map(String.init)
+            .map(normalize)
+            .filter { !$0.isEmpty && ignoredQueryTokens.contains($0) == false }
+
+        return tokens.map { token in
+            var variants = [token]
+            variants.append(contentsOf: tokenSynonyms[token] ?? [])
+            return unique(variants.map(normalize).filter { !$0.isEmpty })
+        }
     }
 
     private static func score(token: String, against rawTerm: String) -> Int? {
@@ -640,6 +730,11 @@ private enum SlashPaletteSearch {
 
         return merged
     }
+
+    private static func unique(_ values: [String]) -> [String] {
+        var seen: Set<String> = []
+        return values.filter { seen.insert($0).inserted }
+    }
 }
 
 struct EditorCanvasCommand: Identifiable, Equatable {
@@ -671,6 +766,7 @@ struct EditorCanvasView: View {
     @State private var selectedSlashCommandID: String?
     @State private var expandedSlashCommandID: String?
     @State private var selectedSlashTemplateID: String?
+    @State private var suppressedAutoExpansionQuery: String?
     @State private var pendingLocalCommand: EditorCanvasCommand?
 
     private var activeCommand: EditorCanvasCommand? {
@@ -683,6 +779,15 @@ struct EditorCanvasView: View {
 
     private var visibleSlashTemplateIDs: [String] {
         visibleSlashTemplates.map(\.id)
+    }
+
+    private var normalizedSlashQueryKey: String? {
+        guard let slashContext else {
+            return nil
+        }
+
+        let key = SlashPaletteSearch.suppressionKey(for: slashContext.query)
+        return key.isEmpty ? nil : key
     }
 
     var body: some View {
@@ -780,9 +885,29 @@ struct EditorCanvasView: View {
         return visibleSlashCommands.first
     }
 
+    private var autoExpandedSlashCommand: EditorSlashCommand? {
+        guard let slashContext,
+              let activeSlashCommand,
+              activeSlashCommand.canExpand else {
+            return nil
+        }
+
+        if let suppressedAutoExpansionQuery,
+           suppressedAutoExpansionQuery == normalizedSlashQueryKey {
+            return nil
+        }
+
+        guard let bestTemplate = SlashPaletteSearch.bestMatchingTemplate(in: activeSlashCommand, query: slashContext.query),
+              bestTemplate.id != activeSlashCommand.primaryTemplate.id else {
+            return nil
+        }
+
+        return activeSlashCommand
+    }
+
     private var expandedSlashCommand: EditorSlashCommand? {
         guard let expandedSlashCommandID else {
-            return nil
+            return autoExpandedSlashCommand
         }
 
         return visibleSlashCommands.first(where: { $0.id == expandedSlashCommandID })
@@ -904,12 +1029,16 @@ struct EditorCanvasView: View {
             return
         }
 
+        suppressedAutoExpansionQuery = nil
         selectedSlashCommandID = command.id
         expandedSlashCommandID = command.id
         selectedSlashTemplateID = command.secondaryTemplates.first?.id
     }
 
     private func collapseSlashTemplates() {
+        if expandedSlashCommandID == nil, autoExpandedSlashCommand != nil {
+            suppressedAutoExpansionQuery = normalizedSlashQueryKey
+        }
         expandedSlashCommandID = nil
         selectedSlashTemplateID = nil
     }
@@ -927,6 +1056,7 @@ struct EditorCanvasView: View {
         selectedSlashCommandID = nil
         expandedSlashCommandID = nil
         selectedSlashTemplateID = nil
+        suppressedAutoExpansionQuery = nil
     }
 
     private func syncSlashSelection() {
@@ -948,6 +1078,11 @@ struct EditorCanvasView: View {
            visibleSlashCommands.contains(where: { $0.id == selectedSlashCommandID }) {
         } else {
             selectedSlashCommandID = visibleSlashCommands.first?.id
+        }
+
+        if let expandedSlashCommandID,
+           visibleSlashCommands.contains(where: { $0.id == expandedSlashCommandID }) == false {
+            self.expandedSlashCommandID = nil
         }
 
         guard let expandedSlashCommand else {

@@ -5,6 +5,7 @@ Dates use the local repository commit date.
 
 ## 2026-03-12
 
+- Add slash synonyms and natural language template matching
 - Add slash palette match highlighting
 - Add fuzzy slash matching and recent usage sorting
 - `dfd44b5` Add numeric shortcuts for slash palette
