@@ -295,11 +295,12 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
             let focusedParagraphRange = MarkdownEditorStyler.focusedParagraphRange(in: value, selectedRange: selectedRange)
             isApplyingUpdate = true
             textView.attributedText = MarkdownEditorStyler.attributedText(for: value, focusedRange: focusedParagraphRange)
-            textView.typingAttributes = MarkdownEditorStyler.baseTypingAttributes
-            textView.selectedRange = NSRange(
+            let clampedSelectedRange = NSRange(
                 location: min(selectedRange.location, textView.text.utf16.count),
                 length: min(selectedRange.length, max(textView.text.utf16.count - min(selectedRange.location, textView.text.utf16.count), 0))
             )
+            textView.selectedRange = clampedSelectedRange
+            textView.typingAttributes = MarkdownEditorStyler.typingAttributes(for: value, selectedRange: clampedSelectedRange)
             keepSelectionComfortablyVisible(in: textView)
             isApplyingUpdate = false
             lastFocusedParagraphRange = focusedParagraphRange
@@ -328,6 +329,7 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
                 return
             }
 
+            textView.typingAttributes = MarkdownEditorStyler.typingAttributes(for: textView.text, selectedRange: textView.selectedRange)
             let focusedParagraphRange = MarkdownEditorStyler.focusedParagraphRange(in: textView.text, selectedRange: textView.selectedRange)
             guard focusedParagraphRange != lastFocusedParagraphRange else {
                 return
@@ -450,6 +452,7 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
             isApplyingUpdate = true
             textView.textStorage?.setAttributedString(MarkdownEditorStyler.attributedText(for: value, focusedRange: focusedParagraphRange))
             textView.setSelectedRanges(selectedRanges, affinity: .downstream, stillSelecting: false)
+            textView.typingAttributes = MarkdownEditorStyler.typingAttributes(for: value, selectedRange: textView.selectedRange())
             keepSelectionComfortablyVisible(in: textView)
             isApplyingUpdate = false
             lastFocusedParagraphRange = focusedParagraphRange
@@ -485,6 +488,7 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
                 return
             }
 
+            textView.typingAttributes = MarkdownEditorStyler.typingAttributes(for: textView.string, selectedRange: textView.selectedRange())
             let focusedParagraphRange = MarkdownEditorStyler.focusedParagraphRange(in: textView.string, selectedRange: textView.selectedRange())
             guard focusedParagraphRange != lastFocusedParagraphRange else {
                 return
@@ -543,6 +547,19 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
 #endif
 
 private enum MarkdownEditorStyler {
+    private struct ActiveLineContext {
+        enum Kind {
+            case body
+            case frontmatter
+            case codeBlock
+            case heading(level: Int, markerCount: Int, leadingWhitespace: Int)
+        }
+
+        let kind: Kind
+        let lineRange: NSRange
+        let isLeadingBlock: Bool
+    }
+
     static var baseTypingAttributes: [NSAttributedString.Key: Any] {
         [
             .font: bodyFont,
@@ -557,6 +574,39 @@ private enum MarkdownEditorStyler {
 
     static var bodyLineHeight: CGFloat {
         bodyFont.pointSize + 11
+    }
+
+    static func typingAttributes(for text: String, selectedRange: NSRange) -> [NSAttributedString.Key: Any] {
+        let lineContext = activeLineContext(in: text, selectedRange: selectedRange)
+
+        switch lineContext.kind {
+        case .frontmatter:
+            return [
+                .font: monoFont(size: 13),
+                .foregroundColor: textColor,
+                .backgroundColor: frontmatterBackground,
+                .paragraphStyle: paragraphStyle(lineSpacing: 7, paragraphSpacing: 4, firstLineHeadIndent: 14, headIndent: 14, tailIndent: -12)
+            ]
+        case .codeBlock:
+            return [
+                .font: monoFont(size: 13.5),
+                .foregroundColor: codeTextColor,
+                .backgroundColor: codeBackground,
+                .paragraphStyle: paragraphStyle(lineSpacing: 4, paragraphSpacing: 1, firstLineHeadIndent: 24, headIndent: 24, tailIndent: -18)
+            ]
+        case let .heading(level, markerCount, leadingWhitespace):
+            let cursorOffset = max(selectedRange.location - lineContext.lineRange.location, 0)
+            if cursorOffset <= leadingWhitespace + markerCount {
+                return [
+                    .font: monoFont(size: headingMarkerSize(level: level, isDisplayHeading: shouldUseDisplayHeading(level: level, isLeadingBlock: lineContext.isLeadingBlock))),
+                    .foregroundColor: headingMarkerColor(isFocused: true, isDisplayHeading: shouldUseDisplayHeading(level: level, isLeadingBlock: lineContext.isLeadingBlock)),
+                    .paragraphStyle: headingParagraphStyle(level: level, isLeadingBlock: lineContext.isLeadingBlock)
+                ]
+            }
+            return headingTypingAttributes(level: level, isLeadingBlock: lineContext.isLeadingBlock)
+        case .body:
+            return baseTypingAttributes
+        }
     }
 
     static func attributedText(for text: String, focusedRange: NSRange? = nil) -> NSAttributedString {
@@ -575,11 +625,14 @@ private enum MarkdownEditorStyler {
         var location = 0
         var inFrontmatter = false
         var inCodeBlock = false
+        var hasEncounteredMeaningfulBlock = false
 
         for (index, line) in lines.enumerated() {
             let lineLength = (line as NSString).length
             let lineRange = NSRange(location: location, length: lineLength)
             let trimmed = line.trimmingCharacters(in: .whitespaces)
+            let isLeadingBlock = trimmed.isEmpty == false && !hasEncounteredMeaningfulBlock
+            let isFocusedLine = focusedRange.map { NSIntersectionRange($0, lineRange).length > 0 } ?? false
 
             if index == 0, trimmed == "---" {
                 inFrontmatter = true
@@ -601,45 +654,67 @@ private enum MarkdownEditorStyler {
             if trimmed.hasPrefix("```") {
                 styleCodeFence(in: attributed, line: line, lineRange: lineRange)
                 inCodeBlock.toggle()
+                if trimmed.isEmpty == false {
+                    hasEncounteredMeaningfulBlock = true
+                }
                 location += lineLength + 1
                 continue
             }
 
             if inCodeBlock {
                 styleCodeLine(in: attributed, lineRange: lineRange)
+                if trimmed.isEmpty == false {
+                    hasEncounteredMeaningfulBlock = true
+                }
                 location += lineLength + 1
                 continue
             }
 
-            if styleHeadingIfNeeded(in: attributed, line: line, lineRange: lineRange) {
+            if styleHeadingIfNeeded(
+                in: attributed,
+                line: line,
+                lineRange: lineRange,
+                isLeadingBlock: isLeadingBlock,
+                isFocusedLine: isFocusedLine
+            ) {
                 applyInlineStyles(in: attributed, line: line, lineRange: lineRange)
+                hasEncounteredMeaningfulBlock = true
                 location += lineLength + 1
                 continue
             }
 
             if styleQuoteIfNeeded(in: attributed, line: line, lineRange: lineRange) {
                 applyInlineStyles(in: attributed, line: line, lineRange: lineRange)
+                if trimmed.isEmpty == false {
+                    hasEncounteredMeaningfulBlock = true
+                }
                 location += lineLength + 1
                 continue
             }
 
             if styleListIfNeeded(in: attributed, line: line, lineRange: lineRange) {
                 applyInlineStyles(in: attributed, line: line, lineRange: lineRange)
+                if trimmed.isEmpty == false {
+                    hasEncounteredMeaningfulBlock = true
+                }
                 location += lineLength + 1
                 continue
             }
 
             if styleDividerIfNeeded(in: attributed, trimmedLine: trimmed, lineRange: lineRange) {
+                hasEncounteredMeaningfulBlock = true
                 location += lineLength + 1
                 continue
             }
 
             if styleTableIfNeeded(in: attributed, line: line, lineRange: lineRange) {
+                hasEncounteredMeaningfulBlock = true
                 location += lineLength + 1
                 continue
             }
 
             if styleImageIfNeeded(in: attributed, line: line, lineRange: lineRange) {
+                hasEncounteredMeaningfulBlock = true
                 location += lineLength + 1
                 continue
             }
@@ -653,6 +728,9 @@ private enum MarkdownEditorStyler {
                 range: lineRange
             )
             applyInlineStyles(in: attributed, line: line, lineRange: lineRange)
+            if trimmed.isEmpty == false {
+                hasEncounteredMeaningfulBlock = true
+            }
             location += lineLength + 1
         }
 
@@ -738,12 +816,14 @@ private enum MarkdownEditorStyler {
         )
     }
 
-    private static func styleHeadingIfNeeded(in attributed: NSMutableAttributedString, line: String, lineRange: NSRange) -> Bool {
-        let trimmed = line.trimmingCharacters(in: .whitespaces)
-        let markerCount = trimmed.prefix { $0 == "#" }.count
-
-        guard (1...6).contains(markerCount),
-              trimmed.dropFirst(markerCount).first == " " else {
+    private static func styleHeadingIfNeeded(
+        in attributed: NSMutableAttributedString,
+        line: String,
+        lineRange: NSRange,
+        isLeadingBlock: Bool,
+        isFocusedLine: Bool
+    ) -> Bool {
+        guard let markerCount = headingLevel(in: line) else {
             return false
         }
 
@@ -752,41 +832,29 @@ private enum MarkdownEditorStyler {
         let spacerRange = NSRange(location: markerRange.location + markerCount, length: 1)
         let titleLength = max(lineRange.length - leadingWhitespace - markerCount - 1, 0)
         let titleRange = NSRange(location: spacerRange.location + 1, length: titleLength)
+        let headingAttributes = headingTypingAttributes(level: markerCount, isLeadingBlock: isLeadingBlock)
+        let isDisplayHeading = shouldUseDisplayHeading(level: markerCount, isLeadingBlock: isLeadingBlock)
 
         attributed.addAttributes(
-            [
-                .font: headingFont(level: markerCount),
-                .foregroundColor: textColor,
-                .paragraphStyle: paragraphStyle(
-                    lineSpacing: 8,
-                    paragraphSpacing: headingSpacingAfter(level: markerCount),
-                    paragraphSpacingBefore: headingSpacingBefore(level: markerCount),
-                    firstLineHeadIndent: 0,
-                    headIndent: 0
-                )
-            ],
+            headingAttributes,
             range: lineRange
         )
         attributed.addAttributes(
             [
-                .font: monoFont(size: headingMarkerSize(level: markerCount)),
-                .foregroundColor: ghostSyntaxColor
+                .font: monoFont(size: headingMarkerSize(level: markerCount, isDisplayHeading: isDisplayHeading)),
+                .foregroundColor: headingMarkerColor(isFocused: isFocusedLine, isDisplayHeading: isDisplayHeading)
             ],
             range: markerRange
         )
         attributed.addAttributes(
             [
-                .foregroundColor: ghostSyntaxColor
+                .foregroundColor: headingMarkerColor(isFocused: isFocusedLine, isDisplayHeading: isDisplayHeading)
             ],
             range: spacerRange
         )
-        attributed.addAttributes(
-            [
-                .font: headingFont(level: markerCount),
-                .foregroundColor: textColor
-            ],
-            range: titleRange
-        )
+        if titleRange.length > 0 {
+            attributed.addAttributes(headingAttributes, range: titleRange)
+        }
         return true
     }
 
@@ -1200,11 +1268,125 @@ private enum MarkdownEditorStyler {
         return font.pointSize
     }
 
+    private static func activeLineContext(in text: String, selectedRange: NSRange) -> ActiveLineContext {
+        let lines = text.components(separatedBy: "\n")
+        let textLength = (text as NSString).length
+        let targetLocation = min(max(selectedRange.location, 0), textLength)
+
+        var location = 0
+        var inFrontmatter = false
+        var inCodeBlock = false
+        var hasEncounteredMeaningfulBlock = false
+
+        for (index, line) in lines.enumerated() {
+            let lineLength = (line as NSString).length
+            let lineRange = NSRange(location: location, length: lineLength)
+            let lineBoundaryEnd = location + lineLength + (index < lines.count - 1 ? 1 : 0)
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            let isLeadingBlock = trimmed.isEmpty == false && !hasEncounteredMeaningfulBlock
+            let isTargetLine = targetLocation >= location && (
+                index == lines.count - 1
+                    ? targetLocation <= lineBoundaryEnd
+                    : targetLocation < lineBoundaryEnd
+            )
+
+            if index == 0, trimmed == "---" {
+                if isTargetLine {
+                    return .init(kind: .frontmatter, lineRange: lineRange, isLeadingBlock: false)
+                }
+                inFrontmatter = true
+                location = lineBoundaryEnd
+                continue
+            }
+
+            if inFrontmatter {
+                if isTargetLine {
+                    return .init(kind: .frontmatter, lineRange: lineRange, isLeadingBlock: false)
+                }
+                if trimmed == "---" {
+                    inFrontmatter = false
+                }
+                location = lineBoundaryEnd
+                continue
+            }
+
+            if trimmed.hasPrefix("```") {
+                if isTargetLine {
+                    return .init(kind: .codeBlock, lineRange: lineRange, isLeadingBlock: isLeadingBlock)
+                }
+                inCodeBlock.toggle()
+                if trimmed.isEmpty == false {
+                    hasEncounteredMeaningfulBlock = true
+                }
+                location = lineBoundaryEnd
+                continue
+            }
+
+            if inCodeBlock {
+                if isTargetLine {
+                    return .init(kind: .codeBlock, lineRange: lineRange, isLeadingBlock: isLeadingBlock)
+                }
+                if trimmed.isEmpty == false {
+                    hasEncounteredMeaningfulBlock = true
+                }
+                location = lineBoundaryEnd
+                continue
+            }
+
+            if let markerCount = headingLevel(in: line) {
+                if isTargetLine {
+                    return .init(
+                        kind: .heading(level: markerCount, markerCount: markerCount, leadingWhitespace: leadingWhitespaceCount(in: line)),
+                        lineRange: lineRange,
+                        isLeadingBlock: isLeadingBlock
+                    )
+                }
+                hasEncounteredMeaningfulBlock = true
+                location = lineBoundaryEnd
+                continue
+            }
+
+            if isTargetLine {
+                return .init(kind: .body, lineRange: lineRange, isLeadingBlock: isLeadingBlock)
+            }
+
+            if trimmed.isEmpty == false {
+                hasEncounteredMeaningfulBlock = true
+            }
+            location = lineBoundaryEnd
+        }
+
+        return .init(kind: .body, lineRange: NSRange(location: targetLocation, length: 0), isLeadingBlock: text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
     private static var bodyFont: PlatformFont {
         readingFont(size: 18, weight: .regular)
     }
 
-    private static func headingFont(level: Int) -> PlatformFont {
+    private static func headingTypingAttributes(level: Int, isLeadingBlock: Bool) -> [NSAttributedString.Key: Any] {
+        let isDisplayHeading = shouldUseDisplayHeading(level: level, isLeadingBlock: isLeadingBlock)
+        var attributes: [NSAttributedString.Key: Any] = [
+            .font: headingFont(level: level, isDisplayHeading: isDisplayHeading),
+            .foregroundColor: headingTextColor(isDisplayHeading: isDisplayHeading),
+            .paragraphStyle: headingParagraphStyle(level: level, isLeadingBlock: isLeadingBlock)
+        ]
+        let kern = headingKern(level: level, isDisplayHeading: isDisplayHeading)
+        if abs(kern) > 0.001 {
+            attributes[.kern] = kern
+        }
+        return attributes
+    }
+
+    private static func headingFont(level: Int, isDisplayHeading: Bool) -> PlatformFont {
+        if isDisplayHeading {
+            switch level {
+            case 1:
+                return readingFont(size: 38, weight: .bold)
+            default:
+                return readingFont(size: 31, weight: .semibold)
+            }
+        }
+
         switch level {
         case 1:
             return readingFont(size: 33, weight: .bold)
@@ -1221,7 +1403,16 @@ private enum MarkdownEditorStyler {
         }
     }
 
-    private static func headingMarkerSize(level: Int) -> CGFloat {
+    private static func headingMarkerSize(level: Int, isDisplayHeading: Bool) -> CGFloat {
+        if isDisplayHeading {
+            switch level {
+            case 1:
+                return 10.5
+            default:
+                return 10
+            }
+        }
+
         switch level {
         case 1:
             return 11
@@ -1232,7 +1423,26 @@ private enum MarkdownEditorStyler {
         }
     }
 
-    private static func headingSpacingBefore(level: Int) -> CGFloat {
+    private static func headingParagraphStyle(level: Int, isLeadingBlock: Bool) -> NSParagraphStyle {
+        let isDisplayHeading = shouldUseDisplayHeading(level: level, isLeadingBlock: isLeadingBlock)
+        return paragraphStyle(
+            lineSpacing: isDisplayHeading ? 6 : 8,
+            paragraphSpacing: headingSpacingAfter(level: level, isDisplayHeading: isDisplayHeading),
+            paragraphSpacingBefore: headingSpacingBefore(level: level, isLeadingBlock: isLeadingBlock, isDisplayHeading: isDisplayHeading),
+            firstLineHeadIndent: 0,
+            headIndent: 0
+        )
+    }
+
+    private static func headingSpacingBefore(level: Int, isLeadingBlock: Bool, isDisplayHeading: Bool) -> CGFloat {
+        if isDisplayHeading {
+            return level == 1 ? 8 : 6
+        }
+
+        if isLeadingBlock {
+            return level <= 2 ? 10 : 8
+        }
+
         switch level {
         case 1:
             return 20
@@ -1245,7 +1455,11 @@ private enum MarkdownEditorStyler {
         }
     }
 
-    private static func headingSpacingAfter(level: Int) -> CGFloat {
+    private static func headingSpacingAfter(level: Int, isDisplayHeading: Bool) -> CGFloat {
+        if isDisplayHeading {
+            return level == 1 ? 24 : 18
+        }
+
         switch level {
         case 1:
             return 20
@@ -1256,6 +1470,43 @@ private enum MarkdownEditorStyler {
         default:
             return 10
         }
+    }
+
+    private static func headingTextColor(isDisplayHeading: Bool) -> PlatformColor {
+        isDisplayHeading ? strongTextColor : textColor
+    }
+
+    private static func headingKern(level: Int, isDisplayHeading: Bool) -> CGFloat {
+        guard isDisplayHeading else {
+            return 0
+        }
+        return level == 1 ? 0.14 : 0.08
+    }
+
+    private static func headingMarkerColor(isFocused: Bool, isDisplayHeading: Bool) -> PlatformColor {
+        if isFocused {
+            return isDisplayHeading
+                ? colorByApplyingAlpha(0.82, to: accentColor)
+                : structuralSyntaxColor
+        }
+
+        return isDisplayHeading ? faintSyntaxColor : ghostSyntaxColor
+    }
+
+    private static func shouldUseDisplayHeading(level: Int, isLeadingBlock: Bool) -> Bool {
+        isLeadingBlock && level <= 2
+    }
+
+    private static func headingLevel(in line: String) -> Int? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        let markerCount = trimmed.prefix { $0 == "#" }.count
+
+        guard (1...6).contains(markerCount),
+              trimmed.dropFirst(markerCount).first == " " else {
+            return nil
+        }
+
+        return markerCount
     }
 
     private static func paragraphStyle(
