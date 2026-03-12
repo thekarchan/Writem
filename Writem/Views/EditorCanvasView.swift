@@ -550,7 +550,9 @@ private enum MarkdownEditorStyler {
     private struct ActiveLineContext {
         enum Kind {
             case body
-            case frontmatter
+            case frontmatterFence
+            case frontmatterField(separatorOffset: Int?)
+            case codeFence(leadingWhitespace: Int, markerLength: Int)
             case codeBlock
             case heading(level: Int, markerCount: Int, leadingWhitespace: Int)
             case quote(leadingWhitespace: Int)
@@ -583,20 +585,22 @@ private enum MarkdownEditorStyler {
         let lineContext = activeLineContext(in: text, selectedRange: selectedRange)
 
         switch lineContext.kind {
-        case .frontmatter:
-            return [
-                .font: monoFont(size: 13),
-                .foregroundColor: textColor,
-                .backgroundColor: frontmatterBackground,
-                .paragraphStyle: paragraphStyle(lineSpacing: 7, paragraphSpacing: 4, firstLineHeadIndent: 14, headIndent: 14, tailIndent: -12)
-            ]
+        case .frontmatterFence:
+            return frontmatterFenceTypingAttributes
+        case let .frontmatterField(separatorOffset):
+            let cursorOffset = max(selectedRange.location - lineContext.lineRange.location, 0)
+            if let separatorOffset, cursorOffset <= separatorOffset {
+                return frontmatterKeyTypingAttributes
+            }
+            return frontmatterValueTypingAttributes
+        case let .codeFence(leadingWhitespace, markerLength):
+            let cursorOffset = max(selectedRange.location - lineContext.lineRange.location, 0)
+            if cursorOffset <= leadingWhitespace + markerLength {
+                return codeFenceMarkerTypingAttributes
+            }
+            return codeFenceLanguageTypingAttributes
         case .codeBlock:
-            return [
-                .font: monoFont(size: 13.5),
-                .foregroundColor: codeTextColor,
-                .backgroundColor: codeBackground,
-                .paragraphStyle: paragraphStyle(lineSpacing: 4, paragraphSpacing: 1, firstLineHeadIndent: 24, headIndent: 24, tailIndent: -18)
-            ]
+            return codeLineTypingAttributes
         case let .heading(level, markerCount, leadingWhitespace):
             let cursorOffset = max(selectedRange.location - lineContext.lineRange.location, 0)
             if cursorOffset <= leadingWhitespace + markerCount {
@@ -767,67 +771,44 @@ private enum MarkdownEditorStyler {
 
     private static func styleFrontmatterFence(in attributed: NSMutableAttributedString, lineRange: NSRange) {
         attributed.addAttributes(
-            [
-                .font: monoFont(size: 12),
-                .foregroundColor: ghostSyntaxColor
-            ],
+            frontmatterFenceTypingAttributes,
             range: lineRange
         )
     }
 
     private static func styleFrontmatterLine(in attributed: NSMutableAttributedString, line: String, lineRange: NSRange) {
         attributed.addAttributes(
-            [
-                .font: monoFont(size: 13),
-                .foregroundColor: textColor,
-                .backgroundColor: frontmatterBackground,
-                .paragraphStyle: paragraphStyle(lineSpacing: 7, paragraphSpacing: 4, firstLineHeadIndent: 14, headIndent: 14, tailIndent: -12)
-            ],
+            frontmatterValueTypingAttributes,
             range: lineRange
         )
 
-        guard let separator = line.firstIndex(of: ":") else {
+        guard let separatorOffset = frontmatterSeparatorOffset(in: line) else {
             return
         }
 
-        let keyLength = line.distance(from: line.startIndex, to: separator)
         attributed.addAttributes(
-            [
-                .foregroundColor: structuralSyntaxColor
-            ],
-            range: NSRange(location: lineRange.location, length: keyLength)
+            frontmatterKeyTypingAttributes,
+            range: NSRange(location: lineRange.location, length: separatorOffset)
         )
     }
 
     private static func styleCodeFence(in attributed: NSMutableAttributedString, line: String, lineRange: NSRange) {
         attributed.addAttributes(
-            [
-                .font: monoFont(size: 12),
-                .foregroundColor: structuralSyntaxColor,
-                .backgroundColor: codeBackground,
-                .paragraphStyle: paragraphStyle(lineSpacing: 4, paragraphSpacing: 4, paragraphSpacingBefore: 8, firstLineHeadIndent: 24, headIndent: 24, tailIndent: -18)
-            ],
+            codeFenceLanguageTypingAttributes,
             range: lineRange
         )
 
-        if line.count > 3 {
+        if let fenceRange = codeFenceRange(in: line, lineRange: lineRange) {
             attributed.addAttributes(
-                [
-                    .foregroundColor: faintSyntaxColor
-                ],
-                range: NSRange(location: lineRange.location + 3, length: max(lineRange.length - 3, 0))
+                codeFenceMarkerTypingAttributes,
+                range: fenceRange
             )
         }
     }
 
     private static func styleCodeLine(in attributed: NSMutableAttributedString, lineRange: NSRange) {
         attributed.addAttributes(
-            [
-                .font: monoFont(size: 13.5),
-                .foregroundColor: codeTextColor,
-                .backgroundColor: codeBackground,
-                .paragraphStyle: paragraphStyle(lineSpacing: 4, paragraphSpacing: 1, firstLineHeadIndent: 24, headIndent: 24, tailIndent: -18)
-            ],
+            codeLineTypingAttributes,
             range: lineRange
         )
     }
@@ -1277,7 +1258,7 @@ private enum MarkdownEditorStyler {
 
             if index == 0, trimmed == "---" {
                 if isTargetLine {
-                    return .init(kind: .frontmatter, lineRange: lineRange, isLeadingBlock: false)
+                    return .init(kind: .frontmatterFence, lineRange: lineRange, isLeadingBlock: false)
                 }
                 inFrontmatter = true
                 location = lineBoundaryEnd
@@ -1286,7 +1267,13 @@ private enum MarkdownEditorStyler {
 
             if inFrontmatter {
                 if isTargetLine {
-                    return .init(kind: .frontmatter, lineRange: lineRange, isLeadingBlock: false)
+                    return .init(
+                        kind: trimmed == "---"
+                            ? .frontmatterFence
+                            : .frontmatterField(separatorOffset: frontmatterSeparatorOffset(in: line)),
+                        lineRange: lineRange,
+                        isLeadingBlock: false
+                    )
                 }
                 if trimmed == "---" {
                     inFrontmatter = false
@@ -1297,7 +1284,11 @@ private enum MarkdownEditorStyler {
 
             if trimmed.hasPrefix("```") {
                 if isTargetLine {
-                    return .init(kind: .codeBlock, lineRange: lineRange, isLeadingBlock: isLeadingBlock)
+                    return .init(
+                        kind: .codeFence(leadingWhitespace: leadingWhitespaceCount(in: line), markerLength: 3),
+                        lineRange: lineRange,
+                        isLeadingBlock: isLeadingBlock
+                    )
                 }
                 inCodeBlock.toggle()
                 if trimmed.isEmpty == false {
@@ -1399,6 +1390,60 @@ private enum MarkdownEditorStyler {
             attributes[.kern] = kern
         }
         return attributes
+    }
+
+    private static var frontmatterFenceTypingAttributes: [NSAttributedString.Key: Any] {
+        [
+            .font: monoFont(size: 12),
+            .foregroundColor: ghostSyntaxColor,
+            .backgroundColor: frontmatterBackground,
+            .paragraphStyle: paragraphStyle(lineSpacing: 4, paragraphSpacing: 3, paragraphSpacingBefore: 4, firstLineHeadIndent: 14, headIndent: 14, tailIndent: -12)
+        ]
+    }
+
+    private static var frontmatterKeyTypingAttributes: [NSAttributedString.Key: Any] {
+        [
+            .font: monoFont(size: 13),
+            .foregroundColor: structuralSyntaxColor,
+            .backgroundColor: frontmatterBackground,
+            .paragraphStyle: paragraphStyle(lineSpacing: 7, paragraphSpacing: 4, firstLineHeadIndent: 14, headIndent: 14, tailIndent: -12)
+        ]
+    }
+
+    private static var frontmatterValueTypingAttributes: [NSAttributedString.Key: Any] {
+        [
+            .font: monoFont(size: 13),
+            .foregroundColor: textColor,
+            .backgroundColor: frontmatterBackground,
+            .paragraphStyle: paragraphStyle(lineSpacing: 7, paragraphSpacing: 4, firstLineHeadIndent: 14, headIndent: 14, tailIndent: -12)
+        ]
+    }
+
+    private static var codeFenceMarkerTypingAttributes: [NSAttributedString.Key: Any] {
+        [
+            .font: monoFont(size: 12),
+            .foregroundColor: structuralSyntaxColor,
+            .backgroundColor: codeBackground,
+            .paragraphStyle: paragraphStyle(lineSpacing: 4, paragraphSpacing: 4, paragraphSpacingBefore: 8, firstLineHeadIndent: 24, headIndent: 24, tailIndent: -18)
+        ]
+    }
+
+    private static var codeFenceLanguageTypingAttributes: [NSAttributedString.Key: Any] {
+        [
+            .font: monoFont(size: 12.5),
+            .foregroundColor: mutedColor,
+            .backgroundColor: codeBackground,
+            .paragraphStyle: paragraphStyle(lineSpacing: 4, paragraphSpacing: 4, paragraphSpacingBefore: 8, firstLineHeadIndent: 24, headIndent: 24, tailIndent: -18)
+        ]
+    }
+
+    private static var codeLineTypingAttributes: [NSAttributedString.Key: Any] {
+        [
+            .font: monoFont(size: 13.5),
+            .foregroundColor: codeTextColor,
+            .backgroundColor: codeBackground,
+            .paragraphStyle: paragraphStyle(lineSpacing: 4, paragraphSpacing: 1, firstLineHeadIndent: 24, headIndent: 24, tailIndent: -18)
+        ]
     }
 
     private static var quoteTypingAttributes: [NSAttributedString.Key: Any] {
@@ -1577,6 +1622,22 @@ private enum MarkdownEditorStyler {
         }
 
         return markerCount
+    }
+
+    private static func frontmatterSeparatorOffset(in line: String) -> Int? {
+        guard let separator = line.firstIndex(of: ":") else {
+            return nil
+        }
+        return line.distance(from: line.startIndex, to: separator)
+    }
+
+    private static func codeFenceRange(in line: String, lineRange: NSRange) -> NSRange? {
+        let leadingWhitespace = leadingWhitespaceCount(in: line)
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard trimmed.hasPrefix("```") else {
+            return nil
+        }
+        return NSRange(location: lineRange.location + leadingWhitespace, length: 3)
     }
 
     private static func quoteMarkerLength(in line: String) -> Int? {
