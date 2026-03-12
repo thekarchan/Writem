@@ -15,6 +15,11 @@ struct EditorRootView: View {
         let message: String
     }
 
+    private enum PendingTransitionAction {
+        case newDraft
+        case openDocument
+    }
+
     @State private var columnVisibility: NavigationSplitViewVisibility = .detailOnly
     @State private var frontmatter: Frontmatter = .empty
     @State private var utilityPanel: UtilityPanel?
@@ -29,6 +34,8 @@ struct EditorRootView: View {
     @State private var isExportingFile = false
     @State private var pendingCanvasCommand: EditorCanvasCommand?
     @State private var pendingImageImportInsertionRange: NSRange?
+    @State private var pendingTransitionAction: PendingTransitionAction?
+    @State private var isShowingUnsavedChangesDialog = false
 
     @EnvironmentObject private var session: EditorSessionStore
     @EnvironmentObject private var settings: EditorSettingsStore
@@ -106,10 +113,10 @@ struct EditorRootView: View {
         .onChange(of: session.text) { _, _ in
             syncFrontmatter()
         }
-        .onChange(of: session.openRequestID) { _, requestID in
-            guard requestID != nil else { return }
-            session.consumeOpenRequest()
-            isImportingDocument = true
+        .onChange(of: session.transitionRequest?.id) { _, _ in
+            guard let transitionRequest = session.transitionRequest else { return }
+            session.consumeTransitionRequest()
+            handleTransitionRequest(transitionRequest.action)
         }
         .onChange(of: session.saveRequest?.id) { _, _ in
             guard let saveRequest = session.saveRequest else { return }
@@ -159,7 +166,9 @@ struct EditorRootView: View {
             switch result {
             case .success(let url):
                 session.finishSave(at: url)
+                continuePendingTransitionIfNeeded()
             case .failure(let error):
+                pendingTransitionAction = nil
                 guard (error as NSError).code != NSUserCancelledError else {
                     return
                 }
@@ -172,6 +181,25 @@ struct EditorRootView: View {
                 message: Text(alert.message),
                 dismissButton: .default(Text("OK"))
             )
+        }
+        .confirmationDialog(
+            "Unsaved changes",
+            isPresented: $isShowingUnsavedChangesDialog,
+            titleVisibility: .visible
+        ) {
+            Button("Save and Continue") {
+                saveAndContinuePendingTransition()
+            }
+
+            Button("Discard Changes", role: .destructive) {
+                discardChangesAndContinue()
+            }
+
+            Button("Keep Editing", role: .cancel) {
+                pendingTransitionAction = nil
+            }
+        } message: {
+            Text("You have unsaved changes. Save them before continuing?")
         }
         .fileExporter(
             isPresented: $isExportingFile,
@@ -198,7 +226,7 @@ struct EditorRootView: View {
     private var compactControlMenu: some View {
         Menu {
             Button("New Draft") {
-                session.restoreScratchDraft()
+                session.requestNewDraft()
             }
 
             Button("Open...") {
@@ -598,15 +626,15 @@ struct EditorRootView: View {
         if !saveRequest.forceSaveAs, session.fileURL != nil {
             do {
                 try session.saveToCurrentLocation()
+                continuePendingTransitionIfNeeded()
             } catch {
+                pendingTransitionAction = nil
                 editorAlert = .init(title: "Save failed", message: error.localizedDescription)
             }
             return
         }
 
-        pendingDocumentSave = MarkdownFileDocument(text: session.text)
-        documentSaveDefaultName = session.suggestedFilename
-        isSavingDocument = true
+        presentSaveAs()
     }
 
     private func openDocument(from url: URL) {
@@ -624,6 +652,64 @@ struct EditorRootView: View {
         } catch {
             editorAlert = .init(title: "Open failed", message: error.localizedDescription)
         }
+    }
+
+    private func handleTransitionRequest(_ action: EditorTransitionAction) {
+        let pendingAction: PendingTransitionAction = {
+            switch action {
+            case .newDraft:
+                return .newDraft
+            case .openDocument:
+                return .openDocument
+            }
+        }()
+
+        if session.isDirty {
+            pendingTransitionAction = pendingAction
+            isShowingUnsavedChangesDialog = true
+            return
+        }
+
+        performTransition(pendingAction)
+    }
+
+    private func saveAndContinuePendingTransition() {
+        guard pendingTransitionAction != nil else { return }
+
+        if session.fileURL != nil {
+            handleSaveRequest(.init(forceSaveAs: false))
+        } else {
+            presentSaveAs()
+        }
+    }
+
+    private func discardChangesAndContinue() {
+        guard let pendingTransitionAction else { return }
+        self.pendingTransitionAction = nil
+        performTransition(pendingTransitionAction)
+    }
+
+    private func continuePendingTransitionIfNeeded() {
+        guard let pendingTransitionAction else { return }
+        self.pendingTransitionAction = nil
+        performTransition(pendingTransitionAction)
+    }
+
+    private func performTransition(_ action: PendingTransitionAction) {
+        switch action {
+        case .newDraft:
+            session.startNewDraft()
+            lastImportedAsset = nil
+            utilityPanel = nil
+        case .openDocument:
+            isImportingDocument = true
+        }
+    }
+
+    private func presentSaveAs() {
+        pendingDocumentSave = MarkdownFileDocument(text: session.text)
+        documentSaveDefaultName = session.suggestedFilename
+        isSavingDocument = true
     }
 
     private func export(_ format: ExportFormat) {

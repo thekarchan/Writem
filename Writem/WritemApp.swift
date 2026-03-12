@@ -28,7 +28,7 @@ private struct EditorFileCommands: Commands {
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
             Button("New Draft") {
-                session.restoreScratchDraft()
+                session.requestNewDraft()
             }
             .keyboardShortcut("n", modifiers: .command)
         }

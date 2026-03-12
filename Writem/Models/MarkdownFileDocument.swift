@@ -33,6 +33,16 @@ struct EditorSaveRequest: Identifiable, Equatable {
     let forceSaveAs: Bool
 }
 
+enum EditorTransitionAction: Equatable {
+    case newDraft
+    case openDocument
+}
+
+struct EditorTransitionRequest: Identifiable, Equatable {
+    let id = UUID()
+    let action: EditorTransitionAction
+}
+
 enum EditorSessionError: LocalizedError {
     case invalidTextEncoding
     case missingSaveLocation
@@ -52,7 +62,7 @@ final class EditorSessionStore: ObservableObject {
     @Published var text: String
     @Published var fileURL: URL?
     @Published private(set) var isDirty: Bool
-    @Published private(set) var openRequestID: UUID?
+    @Published private(set) var transitionRequest: EditorTransitionRequest?
     @Published private(set) var saveRequest: EditorSaveRequest?
 
     private let defaults: UserDefaults
@@ -85,12 +95,16 @@ final class EditorSessionStore: ObservableObject {
         return limited.isEmpty ? "Untitled" : limited
     }
 
-    func requestOpenDocument() {
-        openRequestID = UUID()
+    func requestNewDraft() {
+        transitionRequest = .init(action: .newDraft)
     }
 
-    func consumeOpenRequest() {
-        openRequestID = nil
+    func requestOpenDocument() {
+        transitionRequest = .init(action: .openDocument)
+    }
+
+    func consumeTransitionRequest() {
+        transitionRequest = nil
     }
 
     func requestSave(forceSaveAs: Bool = false) {
@@ -101,12 +115,13 @@ final class EditorSessionStore: ObservableObject {
         saveRequest = nil
     }
 
-    func restoreScratchDraft() {
+    func startNewDraft() {
         applyProgrammaticChange {
-            text = defaults.string(forKey: Key.scratchText) ?? SampleDocument.content
+            text = SampleDocument.content
             fileURL = nil
             lastSavedText = ""
-            isDirty = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            isDirty = false
+            defaults.set(SampleDocument.content, forKey: Key.scratchText)
         }
     }
 
