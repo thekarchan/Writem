@@ -1139,8 +1139,8 @@ private struct MarkdownWritingTextView: View {
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            let horizontalInset = max(minimumHorizontalInset, (proxy.size.width - preferredLineWidth) / 2)
+        GeometryReader { _ in
+            let horizontalInset = minimumHorizontalInset
 
             ZStack(alignment: .topLeading) {
                 PlatformMarkdownTextView(
@@ -1213,50 +1213,50 @@ private struct WritingLayoutProfile {
         if trimmed.isEmpty {
             return .init(
                 isBlank: true,
-                topInset: 148,
-                bottomInset: 224,
-                scrollIndicatorTopInset: 44,
-                scrollIndicatorBottomInset: 54,
-                scrollViewTopInset: 18,
-                scrollViewBottomInset: 92,
-                comfortInset: 172,
-                focusHeightRatio: 0.34,
-                pageVerticalPadding: 28,
-                topFadeHeight: 64,
-                bottomFadeHeight: 88
+                topInset: 26,
+                bottomInset: 96,
+                scrollIndicatorTopInset: 12,
+                scrollIndicatorBottomInset: 20,
+                scrollViewTopInset: 0,
+                scrollViewBottomInset: 28,
+                comfortInset: 84,
+                focusHeightRatio: 0.18,
+                pageVerticalPadding: 0,
+                topFadeHeight: 0,
+                bottomFadeHeight: 28
             )
         }
 
         if trimmed.count < 220 && lineCount <= 5 {
             return .init(
                 isBlank: false,
-                topInset: 118,
-                bottomInset: 194,
-                scrollIndicatorTopInset: 36,
-                scrollIndicatorBottomInset: 40,
-                scrollViewTopInset: 12,
-                scrollViewBottomInset: 82,
-                comfortInset: 148,
-                focusHeightRatio: 0.36,
-                pageVerticalPadding: 22,
-                topFadeHeight: 58,
-                bottomFadeHeight: 80
+                topInset: 28,
+                bottomInset: 104,
+                scrollIndicatorTopInset: 12,
+                scrollIndicatorBottomInset: 20,
+                scrollViewTopInset: 0,
+                scrollViewBottomInset: 32,
+                comfortInset: 92,
+                focusHeightRatio: 0.2,
+                pageVerticalPadding: 0,
+                topFadeHeight: 0,
+                bottomFadeHeight: 32
             )
         }
 
         return .init(
             isBlank: false,
-            topInset: 96,
-            bottomInset: 164,
-            scrollIndicatorTopInset: 30,
-            scrollIndicatorBottomInset: 30,
-            scrollViewTopInset: 8,
-            scrollViewBottomInset: 72,
-            comfortInset: 136,
-            focusHeightRatio: 0.38,
-            pageVerticalPadding: 18,
-            topFadeHeight: 52,
-            bottomFadeHeight: 72
+            topInset: 30,
+            bottomInset: 116,
+            scrollIndicatorTopInset: 12,
+            scrollIndicatorBottomInset: 24,
+            scrollViewTopInset: 0,
+            scrollViewBottomInset: 36,
+            comfortInset: 96,
+            focusHeightRatio: 0.22,
+            pageVerticalPadding: 0,
+            topFadeHeight: 0,
+            bottomFadeHeight: 36
         )
     }
 }
