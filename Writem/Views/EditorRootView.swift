@@ -116,122 +116,139 @@ struct EditorRootView: View {
 
     private var header: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                toolbarButton(
-                    title: columnVisibility == .detailOnly ? "Outline" : "Hide Outline",
-                    symbol: "sidebar.left",
-                    isActive: columnVisibility != .detailOnly
-                ) {
-                    columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
-                }
-
-                Menu {
-                    ForEach(LineWidthPreset.allCases) { preset in
-                        Button(preset.title) {
-                            settings.lineWidthPreset = preset
-                        }
+            HStack(spacing: 0) {
+                HStack(spacing: 2) {
+                    toolbarButton(
+                        title: columnVisibility == .detailOnly ? "Outline" : "Hide Outline",
+                        symbol: "sidebar.left",
+                        isActive: columnVisibility != .detailOnly
+                    ) {
+                        columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
                     }
-                } label: {
-                    toolbarLabel(title: settings.lineWidthPreset.title, symbol: "arrow.left.and.right")
-                }
 
-                Menu {
-                    ForEach(SnippetLibrary.all) { snippet in
-                        Button {
-                            insert(snippet: snippet)
-                        } label: {
-                            Label(snippet.title, systemImage: snippet.symbolName)
+                    Menu {
+                        ForEach(LineWidthPreset.allCases) { preset in
+                            Button(preset.title) {
+                                settings.lineWidthPreset = preset
+                            }
                         }
+                    } label: {
+                        toolbarMenuLabel(title: settings.lineWidthPreset.title, symbol: "arrow.left.and.right")
                     }
-                } label: {
-                    toolbarLabel(title: "Insert", symbol: "plus.square")
-                }
 
-                toolbarButton(title: "Image", symbol: "photo") {
-                    isImportingImages = true
-                }
-
-                toolbarButton(
-                    title: "Frontmatter",
-                    symbol: "slider.horizontal.3",
-                    isActive: utilityPanel == .frontmatter
-                ) {
-                    utilityPanel = utilityPanel == .frontmatter ? nil : .frontmatter
-                }
-
-                toolbarButton(
-                    title: "Tables",
-                    symbol: "tablecells",
-                    isActive: utilityPanel == .tables
-                ) {
-                    utilityPanel = utilityPanel == .tables ? nil : .tables
-                }
-
-                Menu {
-                    ForEach(ExportFormat.allCases) { format in
-                        Button {
-                            export(format)
-                        } label: {
-                            Label(format.title, systemImage: format.symbolName)
+                    Menu {
+                        ForEach(SnippetLibrary.all) { snippet in
+                            Button {
+                                insert(snippet: snippet)
+                            } label: {
+                                Label(snippet.title, systemImage: snippet.symbolName)
+                            }
                         }
+                    } label: {
+                        toolbarMenuLabel(title: "Insert", symbol: "plus.square")
                     }
-                } label: {
-                    toolbarLabel(title: "Export", symbol: "square.and.arrow.up")
+
+                    toolbarButton(title: "Image", symbol: "photo") {
+                        isImportingImages = true
+                    }
                 }
 
-                toolbarButton(
-                    title: "Checks \(errorCount)/\(warningCount)",
-                    symbol: "checklist",
-                    isActive: utilityPanel == .preflight
-                ) {
-                    utilityPanel = utilityPanel == .preflight ? nil : .preflight
+                toolbarDivider()
+
+                HStack(spacing: 2) {
+                    toolbarButton(
+                        title: "Frontmatter",
+                        symbol: "slider.horizontal.3",
+                        isActive: utilityPanel == .frontmatter
+                    ) {
+                        utilityPanel = utilityPanel == .frontmatter ? nil : .frontmatter
+                    }
+
+                    toolbarButton(
+                        title: "Tables",
+                        symbol: "tablecells",
+                        isActive: utilityPanel == .tables
+                    ) {
+                        utilityPanel = utilityPanel == .tables ? nil : .tables
+                    }
+
+                    Menu {
+                        ForEach(ExportFormat.allCases) { format in
+                            Button {
+                                export(format)
+                            } label: {
+                                Label(format.title, systemImage: format.symbolName)
+                            }
+                        }
+                    } label: {
+                        toolbarMenuLabel(title: "Export", symbol: "square.and.arrow.up")
+                    }
+
+                    toolbarButton(
+                        title: "Checks \(errorCount)/\(warningCount)",
+                        symbol: "checklist",
+                        isActive: utilityPanel == .preflight
+                    ) {
+                        utilityPanel = utilityPanel == .preflight ? nil : .preflight
+                    }
+
+                    toolbarButton(
+                        title: "Settings",
+                        symbol: "gearshape",
+                        isActive: utilityPanel == .settings
+                    ) {
+                        utilityPanel = utilityPanel == .settings ? nil : .settings
+                    }
                 }
 
-                toolbarButton(
-                    title: "Settings",
-                    symbol: "gearshape",
-                    isActive: utilityPanel == .settings
-                ) {
-                    utilityPanel = utilityPanel == .settings ? nil : .settings
-                }
+                Spacer(minLength: 18)
+
+                Text(frontmatter.title.isEmpty ? "Untitled" : frontmatter.title)
+                    .font(.system(size: 12, weight: .medium, design: .serif))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .padding(.leading, 14)
+                    .padding(.trailing, 6)
+                    .opacity(0.82)
+                    .frame(maxWidth: 280, alignment: .trailing)
             }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 8)
         }
-        .padding(.horizontal, 26)
-        .padding(.vertical, 10)
         .background(
             Rectangle()
-                .fill(Color.white.opacity(0.86))
+                .fill(Color.white.opacity(0.68))
                 .overlay(alignment: .bottom) {
                     Rectangle()
-                        .fill(Color.black.opacity(0.06))
+                        .fill(Color.black.opacity(0.045))
                         .frame(height: 1)
                 }
         )
     }
 
     private var statusBar: some View {
-        HStack(spacing: 14) {
-            Label("\(wordCount) words", systemImage: "text.word.spacing")
-            Label("\(outline.count) headings", systemImage: "number")
-            Label("\(issues.count) checks", systemImage: "checkmark.seal")
+        HStack(spacing: 12) {
+            Text("\(wordCount) words")
+            Text("\(outline.count) headings")
+            Text("\(issues.count) checks")
             if let lastImportedAsset {
-                Label(lastImportedAsset.relativePath, systemImage: "photo")
+                Text(lastImportedAsset.relativePath)
                     .lineLimit(1)
             } else if fileURL == nil {
-                Label("Save to enable assets", systemImage: "externaldrive.badge.plus")
+                Text("Save to enable assets")
             }
         }
-        .font(.caption)
-        .foregroundStyle(.secondary)
+        .font(.system(size: 11.5, weight: .medium))
+        .foregroundStyle(Color.secondary.opacity(0.82))
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 28)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 30)
+        .padding(.vertical, 8)
         .background(
             Rectangle()
-                .fill(Color.white.opacity(0.7))
+                .fill(Color.white.opacity(0.5))
                 .overlay(alignment: .top) {
                     Rectangle()
-                        .fill(Color.black.opacity(0.05))
+                        .fill(Color.black.opacity(0.035))
                         .frame(height: 1)
                 }
         )
@@ -342,6 +359,34 @@ struct EditorRootView: View {
         .ignoresSafeArea()
     }
 
+    private func toolbarDivider() -> some View {
+        Rectangle()
+            .fill(Color.black.opacity(0.08))
+            .frame(width: 1, height: 16)
+            .padding(.horizontal, 8)
+    }
+
+    private func toolbarMenuLabel(title: String, symbol: String, isActive: Bool = false) -> some View {
+        HStack(spacing: 6) {
+            toolbarLabel(title: title, symbol: symbol, isActive: isActive)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(toolbarForeground(isActive: isActive).opacity(0.8))
+        }
+        .contentShape(Rectangle())
+    }
+
+    private func toolbarForeground(isActive: Bool) -> Color {
+        isActive ? Color(red: 0.33, green: 0.28, blue: 0.25) : Color.secondary
+    }
+
+    private func toolbarUnderline(isActive: Bool) -> some View {
+        Rectangle()
+            .fill(isActive ? Color(red: 0.64, green: 0.45, blue: 0.34).opacity(0.9) : Color.clear)
+            .frame(height: 1.5)
+            .padding(.top, 2)
+    }
+
     private func toolbarButton(title: String, symbol: String, isActive: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             toolbarLabel(title: title, symbol: symbol, isActive: isActive)
@@ -350,14 +395,14 @@ struct EditorRootView: View {
     }
 
     private func toolbarLabel(title: String, symbol: String, isActive: Bool = false) -> some View {
-        Label(title, systemImage: symbol)
-            .font(.system(size: 13, weight: .medium))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .foregroundStyle(isActive ? Color.primary : Color.secondary)
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(isActive ? Color.black.opacity(0.06) : Color.clear)
-            )
+        VStack(alignment: .leading, spacing: 0) {
+            Label(title, systemImage: symbol)
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(toolbarForeground(isActive: isActive))
+            toolbarUnderline(isActive: isActive)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .contentShape(Rectangle())
     }
 }
