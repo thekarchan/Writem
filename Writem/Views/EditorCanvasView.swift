@@ -131,6 +131,7 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
         @Binding private var text: String
         @Binding private var isFocused: Bool
         private var isApplyingUpdate = false
+        private var lastFocusedParagraphRange: NSRange?
 
         init(text: Binding<String>, isFocused: Binding<Bool>) {
             _text = text
@@ -143,14 +144,16 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
             }
 
             let selectedRange = textView.selectedRange
+            let focusedParagraphRange = MarkdownEditorStyler.focusedParagraphRange(in: value, selectedRange: selectedRange)
             isApplyingUpdate = true
-            textView.attributedText = MarkdownEditorStyler.attributedText(for: value)
+            textView.attributedText = MarkdownEditorStyler.attributedText(for: value, focusedRange: focusedParagraphRange)
             textView.typingAttributes = MarkdownEditorStyler.baseTypingAttributes
             textView.selectedRange = NSRange(
                 location: min(selectedRange.location, textView.text.utf16.count),
                 length: min(selectedRange.length, max(textView.text.utf16.count - min(selectedRange.location, textView.text.utf16.count), 0))
             )
             isApplyingUpdate = false
+            lastFocusedParagraphRange = focusedParagraphRange
         }
 
         func textViewDidChange(_ textView: UITextView) {
@@ -168,6 +171,19 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
 
         func textViewDidEndEditing(_ textView: UITextView) {
             isFocused = false
+        }
+
+        func textViewDidChangeSelection(_ textView: UITextView) {
+            guard !isApplyingUpdate else {
+                return
+            }
+
+            let focusedParagraphRange = MarkdownEditorStyler.focusedParagraphRange(in: textView.text, selectedRange: textView.selectedRange)
+            guard focusedParagraphRange != lastFocusedParagraphRange else {
+                return
+            }
+
+            applyStyledText(on: textView, value: textView.text, force: true)
         }
     }
 }
@@ -229,6 +245,7 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
         @Binding private var text: String
         @Binding private var isFocused: Bool
         private var isApplyingUpdate = false
+        private var lastFocusedParagraphRange: NSRange?
 
         init(text: Binding<String>, isFocused: Binding<Bool>) {
             _text = text
@@ -241,10 +258,12 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
             }
 
             let selectedRanges = textView.selectedRanges
+            let focusedParagraphRange = MarkdownEditorStyler.focusedParagraphRange(in: value, selectedRange: textView.selectedRange())
             isApplyingUpdate = true
-            textView.textStorage?.setAttributedString(MarkdownEditorStyler.attributedText(for: value))
+            textView.textStorage?.setAttributedString(MarkdownEditorStyler.attributedText(for: value, focusedRange: focusedParagraphRange))
             textView.setSelectedRanges(selectedRanges, affinity: .downstream, stillSelecting: false)
             isApplyingUpdate = false
+            lastFocusedParagraphRange = focusedParagraphRange
         }
 
         func textDidChange(_ notification: Notification) {
@@ -264,6 +283,20 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
         func textDidEndEditing(_ notification: Notification) {
             isFocused = false
         }
+
+        func textViewDidChangeSelection(_ notification: Notification) {
+            guard !isApplyingUpdate,
+                  let textView = notification.object as? NSTextView else {
+                return
+            }
+
+            let focusedParagraphRange = MarkdownEditorStyler.focusedParagraphRange(in: textView.string, selectedRange: textView.selectedRange())
+            guard focusedParagraphRange != lastFocusedParagraphRange else {
+                return
+            }
+
+            applyStyledText(on: textView, value: textView.string, force: true)
+        }
     }
 }
 #endif
@@ -281,7 +314,7 @@ private enum MarkdownEditorStyler {
         textColor
     }
 
-    static func attributedText(for text: String) -> NSAttributedString {
+    static func attributedText(for text: String, focusedRange: NSRange? = nil) -> NSAttributedString {
         let attributed = NSMutableAttributedString(string: text)
         let fullRange = NSRange(location: 0, length: attributed.length)
         attributed.addAttributes(
@@ -378,7 +411,19 @@ private enum MarkdownEditorStyler {
             location += lineLength + 1
         }
 
+        applyParagraphFocus(in: attributed, text: text, focusedRange: focusedRange)
         return attributed
+    }
+
+    static func focusedParagraphRange(in text: String, selectedRange: NSRange) -> NSRange? {
+        let nsText = text as NSString
+        guard nsText.length > 0 else {
+            return nil
+        }
+
+        let clampedLocation = min(max(selectedRange.location, 0), max(nsText.length - 1, 0))
+        let clampedLength = min(max(selectedRange.length, 0), nsText.length - clampedLocation)
+        return nsText.paragraphRange(for: NSRange(location: clampedLocation, length: clampedLength))
     }
 
     private static func styleFrontmatterFence(in attributed: NSMutableAttributedString, lineRange: NSRange) {
@@ -809,6 +854,81 @@ private enum MarkdownEditorStyler {
                 range: NSRange(location: range.location + index, length: 1)
             )
         }
+    }
+
+    private static func applyParagraphFocus(in attributed: NSMutableAttributedString, text: String, focusedRange: NSRange?) {
+        guard let focusedRange,
+              attributed.length > 0 else {
+            return
+        }
+
+        let nsText = text as NSString
+        let paragraphRanges = rangesByParagraph(in: nsText)
+        let focusedIndices = paragraphRanges.indices.filter { NSIntersectionRange(paragraphRanges[$0], focusedRange).length > 0 }
+
+        guard !focusedIndices.isEmpty else {
+            return
+        }
+
+        for (index, paragraphRange) in paragraphRanges.enumerated() {
+            let distance = focusedIndices.map { abs($0 - index) }.min() ?? 0
+            let alpha: CGFloat
+
+            switch distance {
+            case 0:
+                alpha = 1
+            case 1:
+                alpha = 0.84
+            default:
+                alpha = 0.68
+            }
+
+            guard alpha < 0.999 else {
+                continue
+            }
+
+            fadeForegroundColors(in: attributed, range: paragraphRange, alpha: alpha)
+        }
+    }
+
+    private static func rangesByParagraph(in text: NSString) -> [NSRange] {
+        guard text.length > 0 else {
+            return []
+        }
+
+        var ranges: [NSRange] = []
+        var location = 0
+
+        while location < text.length {
+            let paragraphRange = text.paragraphRange(for: NSRange(location: location, length: 0))
+            ranges.append(paragraphRange)
+            location = NSMaxRange(paragraphRange)
+        }
+
+        return ranges
+    }
+
+    private static func fadeForegroundColors(in attributed: NSMutableAttributedString, range: NSRange, alpha: CGFloat) {
+        attributed.enumerateAttribute(.foregroundColor, in: range) { value, effectiveRange, _ in
+            guard let color = value as? PlatformColor else {
+                return
+            }
+
+            attributed.addAttribute(
+                .foregroundColor,
+                value: colorByApplyingAlpha(alpha, to: color),
+                range: effectiveRange
+            )
+        }
+    }
+
+    private static func colorByApplyingAlpha(_ alpha: CGFloat, to color: PlatformColor) -> PlatformColor {
+        #if canImport(AppKit)
+        let resolved = color.usingColorSpace(.deviceRGB) ?? color
+        return resolved.withAlphaComponent(resolved.alphaComponent * alpha)
+        #else
+        return color.withAlphaComponent(color.cgColor.alpha * alpha)
+        #endif
     }
 
     private static func inlineFontSize(_ attributed: NSMutableAttributedString, range: NSRange) -> CGFloat {
