@@ -363,6 +363,20 @@ private enum SlashPaletteSearch {
             .map(\.template)
     }
 
+    static func highlightRanges(in value: String, query: String) -> [Range<String.Index>] {
+        let tokens = query
+            .split(whereSeparator: \.isWhitespace)
+            .map(String.init)
+            .filter { !$0.isEmpty }
+
+        guard !tokens.isEmpty, !value.isEmpty else {
+            return []
+        }
+
+        let collectedRanges = tokens.flatMap { highlightRanges(for: $0, in: value) }
+        return mergeRanges(collectedRanges)
+    }
+
     private static func commandScore(for command: EditorSlashCommand, query: String) -> Int? {
         compositeScore(for: command.searchTerms, query: query)
     }
@@ -490,6 +504,141 @@ private enum SlashPaletteSearch {
             .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
             .lowercased()
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func highlightRanges(for token: String, in value: String) -> [Range<String.Index>] {
+        if let range = value.range(of: token, options: [.caseInsensitive, .diacriticInsensitive]) {
+            return [range]
+        }
+
+        if let range = wordPrefixRange(for: token, in: value) {
+            return [range]
+        }
+
+        if let ranges = fuzzyHighlightRanges(for: token, in: value) {
+            return ranges
+        }
+
+        return []
+    }
+
+    private static func wordPrefixRange(for token: String, in value: String) -> Range<String.Index>? {
+        let normalizedToken = normalize(token)
+        guard !normalizedToken.isEmpty else {
+            return nil
+        }
+
+        var match: Range<String.Index>?
+
+        value.enumerateSubstrings(in: value.startIndex..<value.endIndex, options: .byWords) { substring, range, _, stop in
+            guard let substring else {
+                return
+            }
+
+            let normalizedSubstring = normalize(substring)
+            guard normalizedSubstring.hasPrefix(normalizedToken) else {
+                return
+            }
+
+            let tokenLength = min(normalizedToken.count, substring.count)
+            let upperBound = value.index(range.lowerBound, offsetBy: tokenLength)
+            match = range.lowerBound..<upperBound
+            stop = true
+        }
+
+        return match
+    }
+
+    private static func fuzzyHighlightRanges(for token: String, in value: String) -> [Range<String.Index>]? {
+        let normalizedToken = Array(normalize(token))
+        let normalizedValue = Array(normalize(value))
+        let rawIndices = Array(value.indices)
+
+        guard !normalizedToken.isEmpty, normalizedValue.count == rawIndices.count else {
+            return nil
+        }
+
+        var matchedOffsets: [Int] = []
+        var searchOffset = 0
+
+        for character in normalizedToken {
+            var foundOffset: Int?
+            while searchOffset < normalizedValue.count {
+                if normalizedValue[searchOffset] == character {
+                    foundOffset = searchOffset
+                    searchOffset += 1
+                    break
+                }
+                searchOffset += 1
+            }
+
+            guard let foundOffset else {
+                return nil
+            }
+
+            matchedOffsets.append(foundOffset)
+        }
+
+        return groupedRanges(from: matchedOffsets, in: value, rawIndices: rawIndices)
+    }
+
+    private static func groupedRanges(
+        from offsets: [Int],
+        in value: String,
+        rawIndices: [String.Index]
+    ) -> [Range<String.Index>] {
+        guard let firstOffset = offsets.first else {
+            return []
+        }
+
+        var ranges: [Range<String.Index>] = []
+        var groupStart = firstOffset
+        var previousOffset = firstOffset
+
+        for offset in offsets.dropFirst() {
+            if offset == previousOffset + 1 {
+                previousOffset = offset
+                continue
+            }
+
+            ranges.append(range(for: groupStart...previousOffset, in: value, rawIndices: rawIndices))
+            groupStart = offset
+            previousOffset = offset
+        }
+
+        ranges.append(range(for: groupStart...previousOffset, in: value, rawIndices: rawIndices))
+        return ranges
+    }
+
+    private static func range(
+        for offsets: ClosedRange<Int>,
+        in value: String,
+        rawIndices: [String.Index]
+    ) -> Range<String.Index> {
+        let lowerBound = rawIndices[offsets.lowerBound]
+        let upperBase = rawIndices[offsets.upperBound]
+        let upperBound = value.index(after: upperBase)
+        return lowerBound..<upperBound
+    }
+
+    private static func mergeRanges(_ ranges: [Range<String.Index>]) -> [Range<String.Index>] {
+        let sortedRanges = ranges.sorted { $0.lowerBound < $1.lowerBound }
+        guard let firstRange = sortedRanges.first else {
+            return []
+        }
+
+        var merged: [Range<String.Index>] = [firstRange]
+
+        for range in sortedRanges.dropFirst() {
+            if let last = merged.last, range.lowerBound <= last.upperBound {
+                let combinedUpperBound = max(last.upperBound, range.upperBound)
+                merged[merged.count - 1] = last.lowerBound..<combinedUpperBound
+            } else {
+                merged.append(range)
+            }
+        }
+
+        return merged
     }
 }
 
@@ -1061,6 +1210,8 @@ private struct SlashCommandPaletteView: View {
     let onExpandCommand: (EditorSlashCommand) -> Void
     let onCollapse: () -> Void
 
+    private let highlightColor = Color(red: 0.47, green: 0.33, blue: 0.2)
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
@@ -1072,9 +1223,15 @@ private struct SlashCommandPaletteView: View {
                     Button {
                         onCollapse()
                     } label: {
-                        Text(expandedCommand.title)
-                            .font(.system(size: 11.5, weight: .semibold))
-                            .foregroundStyle(Color(red: 0.34, green: 0.29, blue: 0.25))
+                        highlightedText(
+                            expandedCommand.title,
+                            query: query,
+                            fontSize: 11.5,
+                            baseWeight: .semibold,
+                            emphasisWeight: .bold,
+                            baseColor: Color(red: 0.34, green: 0.29, blue: 0.25),
+                            emphasisColor: highlightColor
+                        )
                     }
                     .buttonStyle(.plain)
 
@@ -1139,12 +1296,24 @@ private struct SlashCommandPaletteView: View {
                                     .foregroundStyle(Color(red: 0.52, green: 0.45, blue: 0.39))
 
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(command.title)
-                                        .font(.system(size: 12.5, weight: .medium))
-                                        .foregroundStyle(Color(red: 0.16, green: 0.15, blue: 0.14))
-                                    Text(command.detail)
-                                        .font(.system(size: 11, weight: .medium))
-                                        .foregroundStyle(.secondary)
+                                    highlightedText(
+                                        command.title,
+                                        query: query,
+                                        fontSize: 12.5,
+                                        baseWeight: .medium,
+                                        emphasisWeight: .semibold,
+                                        baseColor: Color(red: 0.16, green: 0.15, blue: 0.14),
+                                        emphasisColor: highlightColor
+                                    )
+                                    highlightedText(
+                                        command.detail,
+                                        query: query,
+                                        fontSize: 11,
+                                        baseWeight: .medium,
+                                        emphasisWeight: .semibold,
+                                        baseColor: .secondary,
+                                        emphasisColor: Color(red: 0.5, green: 0.38, blue: 0.25)
+                                    )
                                 }
 
                                 Spacer(minLength: 0)
@@ -1202,12 +1371,24 @@ private struct SlashCommandPaletteView: View {
                                 .foregroundStyle(Color(red: 0.52, green: 0.45, blue: 0.39))
 
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(template.title)
-                                    .font(.system(size: 12.5, weight: .medium))
-                                    .foregroundStyle(Color(red: 0.16, green: 0.15, blue: 0.14))
-                                Text(template.detail)
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundStyle(.secondary)
+                                highlightedText(
+                                    template.title,
+                                    query: query,
+                                    fontSize: 12.5,
+                                    baseWeight: .medium,
+                                    emphasisWeight: .semibold,
+                                    baseColor: Color(red: 0.16, green: 0.15, blue: 0.14),
+                                    emphasisColor: highlightColor
+                                )
+                                highlightedText(
+                                    template.detail,
+                                    query: query,
+                                    fontSize: 11,
+                                    baseWeight: .medium,
+                                    emphasisWeight: .semibold,
+                                    baseColor: .secondary,
+                                    emphasisColor: Color(red: 0.5, green: 0.38, blue: 0.25)
+                                )
                             }
 
                             Spacer(minLength: 0)
@@ -1249,6 +1430,38 @@ private struct SlashCommandPaletteView: View {
                         .stroke(Color(red: 0.6, green: 0.55, blue: 0.49).opacity(0.18), lineWidth: 0.7)
                 }
         }
+    }
+
+    private func highlightedText(
+        _ value: String,
+        query: String,
+        fontSize: CGFloat,
+        baseWeight: Font.Weight,
+        emphasisWeight: Font.Weight,
+        baseColor: Color,
+        emphasisColor: Color
+    ) -> Text {
+        let ranges = SlashPaletteSearch.highlightRanges(in: value, query: query)
+        guard !ranges.isEmpty else {
+            return Text(value)
+                .font(.system(size: fontSize, weight: baseWeight))
+                .foregroundStyle(baseColor)
+        }
+
+        var attributed = AttributedString(value)
+        attributed.font = .system(size: fontSize, weight: baseWeight)
+        attributed.foregroundColor = baseColor
+
+        for range in ranges {
+            guard let attributedRange = Range(range, in: attributed) else {
+                continue
+            }
+
+            attributed[attributedRange].foregroundColor = emphasisColor
+            attributed[attributedRange].font = .system(size: fontSize, weight: emphasisWeight)
+        }
+
+        return Text(attributed)
     }
 }
 
