@@ -69,6 +69,12 @@ struct EditorCanvasReplacement: Equatable {
     let selectedRange: NSRange
 }
 
+private enum SlashCommandKeyboardAction {
+    case moveSelection(Int)
+    case submit
+    case dismiss
+}
+
 struct EditorCanvasCommand: Identifiable, Equatable {
     enum Action: Equatable {
         case bold
@@ -93,10 +99,15 @@ struct EditorCanvasView: View {
     @State private var isImageDropTarget = false
     @State private var shouldFocusEditor = false
     @State private var slashContext: SlashCommandContext?
+    @State private var selectedSlashCommandID: String?
     @State private var pendingLocalCommand: EditorCanvasCommand?
 
     private var activeCommand: EditorCanvasCommand? {
         pendingLocalCommand ?? command
+    }
+
+    private var visibleSlashCommandIDs: [String] {
+        visibleSlashCommands.map(\.id)
     }
 
     var body: some View {
@@ -127,6 +138,12 @@ struct EditorCanvasView: View {
                         .padding(.trailing, 24)
                 }
             }
+            .onChange(of: slashContext) { _, _ in
+                syncSlashSelection()
+            }
+            .onChange(of: visibleSlashCommandIDs) { _, _ in
+                syncSlashSelection()
+            }
     }
 
     private var centeredEditor: some View {
@@ -139,7 +156,11 @@ struct EditorCanvasView: View {
                 onCommandHandled: handleCommandHandled,
                 slashContext: $slashContext,
                 visibleSlashCommands: visibleSlashCommands,
-                onSelectSlashCommand: issueSlashCommand
+                selectedSlashCommandID: selectedSlashCommandID,
+                activeSlashCommand: activeSlashCommand,
+                onSelectSlashCommand: issueSlashCommand,
+                onMoveSlashSelection: moveSlashSelection,
+                onDismissSlashPalette: dismissSlashPalette
             )
                 .frame(maxWidth: lineWidth, maxHeight: .infinity)
                 .padding(.top, 24)
@@ -157,9 +178,55 @@ struct EditorCanvasView: View {
         return Array(EditorSlashCommand.matching(query: slashContext.query).prefix(6))
     }
 
+    private var activeSlashCommand: EditorSlashCommand? {
+        if let selectedSlashCommandID,
+           let selectedCommand = visibleSlashCommands.first(where: { $0.id == selectedSlashCommandID }) {
+            return selectedCommand
+        }
+
+        return visibleSlashCommands.first
+    }
+
     private func issueSlashCommand(_ slashCommand: EditorSlashCommand, context: SlashCommandContext) {
         let replacement = MarkdownEditorStyler.replacement(for: slashCommand, context: context)
         pendingLocalCommand = EditorCanvasCommand(action: .replace(replacement))
+    }
+
+    private func moveSlashSelection(by delta: Int) {
+        guard !visibleSlashCommands.isEmpty else {
+            selectedSlashCommandID = nil
+            return
+        }
+
+        let currentIndex = activeSlashCommand.flatMap { command in
+            visibleSlashCommands.firstIndex(where: { $0.id == command.id })
+        } ?? 0
+        let targetIndex = min(max(currentIndex + delta, 0), visibleSlashCommands.count - 1)
+        selectedSlashCommandID = visibleSlashCommands[targetIndex].id
+    }
+
+    private func dismissSlashPalette() {
+        slashContext = nil
+        selectedSlashCommandID = nil
+    }
+
+    private func syncSlashSelection() {
+        guard slashContext != nil else {
+            selectedSlashCommandID = nil
+            return
+        }
+
+        guard !visibleSlashCommands.isEmpty else {
+            selectedSlashCommandID = nil
+            return
+        }
+
+        if let selectedSlashCommandID,
+           visibleSlashCommands.contains(where: { $0.id == selectedSlashCommandID }) {
+            return
+        }
+
+        selectedSlashCommandID = visibleSlashCommands.first?.id
     }
 
     private func handleCommandHandled(_ commandID: UUID) {
@@ -179,7 +246,11 @@ private struct MarkdownWritingTextView: View {
     let onCommandHandled: (UUID) -> Void
     @Binding var slashContext: SlashCommandContext?
     let visibleSlashCommands: [EditorSlashCommand]
+    let selectedSlashCommandID: String?
+    let activeSlashCommand: EditorSlashCommand?
     let onSelectSlashCommand: (EditorSlashCommand, SlashCommandContext) -> Void
+    let onMoveSlashSelection: (Int) -> Void
+    let onDismissSlashPalette: () -> Void
 
     private var layoutProfile: WritingLayoutProfile {
         WritingLayoutProfile.current(for: text)
@@ -238,7 +309,10 @@ private struct MarkdownWritingTextView: View {
                 layoutProfile: layoutProfile,
                 command: command,
                 onCommandHandled: onCommandHandled,
-                slashContext: $slashContext
+                slashContext: $slashContext,
+                activeSlashCommand: activeSlashCommand,
+                onMoveSlashSelection: onMoveSlashSelection,
+                onDismissSlashPalette: onDismissSlashPalette
             )
                 .padding(.horizontal, 42)
                 .padding(.vertical, layoutProfile.pageVerticalPadding)
@@ -247,6 +321,7 @@ private struct MarkdownWritingTextView: View {
             if let slashContext {
                 SlashCommandPaletteView(
                     commands: visibleSlashCommands,
+                    selectedCommandID: selectedSlashCommandID,
                     query: slashContext.query,
                     onSelect: { command in
                         onSelectSlashCommand(command, slashContext)
@@ -364,6 +439,7 @@ private struct WritingLayoutProfile {
 
 private struct SlashCommandPaletteView: View {
     let commands: [EditorSlashCommand]
+    let selectedCommandID: String?
     let query: String
     let onSelect: (EditorSlashCommand) -> Void
 
@@ -408,6 +484,14 @@ private struct SlashCommandPaletteView: View {
                             }
                             .padding(.horizontal, 10)
                             .padding(.vertical, 7)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(
+                                        command.id == selectedCommandID
+                                            ? Color(red: 0.94, green: 0.91, blue: 0.86)
+                                            : Color.clear
+                                    )
+                            )
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
@@ -441,6 +525,41 @@ private struct SlashCommandPaletteView: View {
 }
 
 #if canImport(UIKit)
+private final class SlashAwareTextView: UITextView {
+    var slashPaletteEnabled = false
+    var activeSlashCommand: EditorSlashCommand?
+    var onSlashAction: ((SlashCommandKeyboardAction) -> Void)?
+
+    override var keyCommands: [UIKeyCommand]? {
+        guard slashPaletteEnabled else {
+            return super.keyCommands
+        }
+
+        return [
+            UIKeyCommand(input: UIKeyCommand.inputUpArrow, modifierFlags: [], action: #selector(handleSlashMoveUp)),
+            UIKeyCommand(input: UIKeyCommand.inputDownArrow, modifierFlags: [], action: #selector(handleSlashMoveDown)),
+            UIKeyCommand(input: "\t", modifierFlags: [], action: #selector(handleSlashSubmit)),
+            UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(handleSlashDismiss))
+        ] + (super.keyCommands ?? [])
+    }
+
+    @objc private func handleSlashMoveUp() {
+        onSlashAction?(.moveSelection(-1))
+    }
+
+    @objc private func handleSlashMoveDown() {
+        onSlashAction?(.moveSelection(1))
+    }
+
+    @objc private func handleSlashSubmit() {
+        onSlashAction?(.submit)
+    }
+
+    @objc private func handleSlashDismiss() {
+        onSlashAction?(.dismiss)
+    }
+}
+
 private struct PlatformMarkdownTextView: UIViewRepresentable {
     @Binding var text: String
     @Binding var isFocused: Bool
@@ -448,13 +567,22 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
     let command: EditorCanvasCommand?
     let onCommandHandled: (UUID) -> Void
     @Binding var slashContext: SlashCommandContext?
+    let activeSlashCommand: EditorSlashCommand?
+    let onMoveSlashSelection: (Int) -> Void
+    let onDismissSlashPalette: () -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text, isFocused: $isFocused, slashContext: $slashContext)
+        Coordinator(
+            text: $text,
+            isFocused: $isFocused,
+            slashContext: $slashContext,
+            onMoveSlashSelection: onMoveSlashSelection,
+            onDismissSlashPalette: onDismissSlashPalette
+        )
     }
 
     func makeUIView(context: Context) -> UITextView {
-        let textView = UITextView()
+        let textView = SlashAwareTextView()
         textView.delegate = context.coordinator
         textView.backgroundColor = .clear
         textView.autocorrectionType = .yes
@@ -476,6 +604,17 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
         applyLayoutMetrics(to: textView, for: layoutProfile)
         context.coordinator.applyStyledText(on: textView, value: text, force: textView.text != text)
         context.coordinator.applyCommandIfNeeded(command, on: textView, onCommandHandled: onCommandHandled)
+        if let textView = textView as? SlashAwareTextView {
+            textView.slashPaletteEnabled = slashContext != nil
+            textView.activeSlashCommand = activeSlashCommand
+            textView.onSlashAction = { [weak textView, weak coordinator = context.coordinator] action in
+                guard let textView, let coordinator else {
+                    return
+                }
+
+                coordinator.handleSlashKeyboardAction(action, on: textView)
+            }
+        }
 
         if isFocused, !textView.isFirstResponder {
             textView.becomeFirstResponder()
@@ -496,14 +635,24 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
         @Binding private var text: String
         @Binding private var isFocused: Bool
         @Binding private var slashContext: SlashCommandContext?
+        private let onMoveSlashSelection: (Int) -> Void
+        private let onDismissSlashPalette: () -> Void
         private var isApplyingUpdate = false
         private var lastFocusedParagraphRange: NSRange?
         private var lastHandledCommandID: UUID?
 
-        init(text: Binding<String>, isFocused: Binding<Bool>, slashContext: Binding<SlashCommandContext?>) {
+        init(
+            text: Binding<String>,
+            isFocused: Binding<Bool>,
+            slashContext: Binding<SlashCommandContext?>,
+            onMoveSlashSelection: @escaping (Int) -> Void,
+            onDismissSlashPalette: @escaping () -> Void
+        ) {
             _text = text
             _isFocused = isFocused
             _slashContext = slashContext
+            self.onMoveSlashSelection = onMoveSlashSelection
+            self.onDismissSlashPalette = onDismissSlashPalette
         }
 
         func applyStyledText(on textView: UITextView, value: String, selectedRange overrideSelectedRange: NSRange? = nil, force: Bool) {
@@ -533,7 +682,11 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
             }
 
             if replacementText == "\n",
-               let mutation = MarkdownEditorStyler.slashSubmitMutation(in: textView.text, selectedRange: range) {
+               let mutation = MarkdownEditorStyler.slashSubmitMutation(
+                for: (textView as? SlashAwareTextView)?.activeSlashCommand,
+                in: textView.text,
+                selectedRange: range
+               ) {
                 applyMutation(
                     on: textView,
                     replacementRange: mutation.replacementRange,
@@ -674,9 +827,62 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
         private func updateSlashContext(for text: String, selectedRange: NSRange) {
             slashContext = MarkdownEditorStyler.slashContext(in: text, selectedRange: selectedRange)
         }
+
+        func handleSlashKeyboardAction(_ action: SlashCommandKeyboardAction, on textView: UITextView) {
+            guard slashContext != nil else {
+                return
+            }
+
+            switch action {
+            case let .moveSelection(delta):
+                onMoveSlashSelection(delta)
+            case .dismiss:
+                onDismissSlashPalette()
+            case .submit:
+                guard let mutation = MarkdownEditorStyler.slashSubmitMutation(
+                    for: (textView as? SlashAwareTextView)?.activeSlashCommand,
+                    in: textView.text,
+                    selectedRange: textView.selectedRange
+                ) else {
+                    return
+                }
+                applyMutation(
+                    on: textView,
+                    replacementRange: mutation.replacementRange,
+                    replacementText: mutation.replacementText,
+                    selectedRange: mutation.selectedRange
+                )
+            }
+        }
     }
 }
 #elseif canImport(AppKit)
+private final class SlashAwareNSTextView: NSTextView {
+    var slashPaletteEnabled = false
+    var activeSlashCommand: EditorSlashCommand?
+    var onSlashAction: ((SlashCommandKeyboardAction) -> Void)?
+
+    override func doCommand(by selector: Selector) {
+        guard slashPaletteEnabled else {
+            super.doCommand(by: selector)
+            return
+        }
+
+        switch selector {
+        case #selector(moveUp(_:)):
+            onSlashAction?(.moveSelection(-1))
+        case #selector(moveDown(_:)):
+            onSlashAction?(.moveSelection(1))
+        case #selector(insertTab(_:)):
+            onSlashAction?(.submit)
+        case #selector(cancelOperation(_:)):
+            onSlashAction?(.dismiss)
+        default:
+            super.doCommand(by: selector)
+        }
+    }
+}
+
 private struct PlatformMarkdownTextView: NSViewRepresentable {
     @Binding var text: String
     @Binding var isFocused: Bool
@@ -684,9 +890,18 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
     let command: EditorCanvasCommand?
     let onCommandHandled: (UUID) -> Void
     @Binding var slashContext: SlashCommandContext?
+    let activeSlashCommand: EditorSlashCommand?
+    let onMoveSlashSelection: (Int) -> Void
+    let onDismissSlashPalette: () -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text, isFocused: $isFocused, slashContext: $slashContext)
+        Coordinator(
+            text: $text,
+            isFocused: $isFocused,
+            slashContext: $slashContext,
+            onMoveSlashSelection: onMoveSlashSelection,
+            onDismissSlashPalette: onDismissSlashPalette
+        )
     }
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -698,7 +913,7 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
         scrollView.autohidesScrollers = true
         scrollView.scrollerStyle = .overlay
 
-        let textView = NSTextView()
+        let textView = SlashAwareNSTextView()
         textView.delegate = context.coordinator
         textView.drawsBackground = false
         textView.isRichText = true
@@ -731,6 +946,17 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
         applyLayoutMetrics(to: scrollView, textView: textView, for: layoutProfile)
         context.coordinator.applyStyledText(on: textView, value: text, force: textView.string != text)
         context.coordinator.applyCommandIfNeeded(command, on: textView, onCommandHandled: onCommandHandled)
+        if let textView = textView as? SlashAwareNSTextView {
+            textView.slashPaletteEnabled = slashContext != nil
+            textView.activeSlashCommand = activeSlashCommand
+            textView.onSlashAction = { [weak textView, weak coordinator = context.coordinator] action in
+                guard let textView, let coordinator else {
+                    return
+                }
+
+                coordinator.handleSlashKeyboardAction(action, on: textView)
+            }
+        }
 
         if isFocused, textView.window?.firstResponder !== textView {
             textView.window?.makeFirstResponder(textView)
@@ -751,14 +977,24 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
         @Binding private var text: String
         @Binding private var isFocused: Bool
         @Binding private var slashContext: SlashCommandContext?
+        private let onMoveSlashSelection: (Int) -> Void
+        private let onDismissSlashPalette: () -> Void
         private var isApplyingUpdate = false
         private var lastFocusedParagraphRange: NSRange?
         private var lastHandledCommandID: UUID?
 
-        init(text: Binding<String>, isFocused: Binding<Bool>, slashContext: Binding<SlashCommandContext?>) {
+        init(
+            text: Binding<String>,
+            isFocused: Binding<Bool>,
+            slashContext: Binding<SlashCommandContext?>,
+            onMoveSlashSelection: @escaping (Int) -> Void,
+            onDismissSlashPalette: @escaping () -> Void
+        ) {
             _text = text
             _isFocused = isFocused
             _slashContext = slashContext
+            self.onMoveSlashSelection = onMoveSlashSelection
+            self.onDismissSlashPalette = onDismissSlashPalette
         }
 
         func applyStyledText(on textView: NSTextView, value: String, selectedRange overrideSelectedRange: NSRange? = nil, force: Bool) {
@@ -785,7 +1021,11 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
             }
 
             if replacementString == "\n",
-               let mutation = MarkdownEditorStyler.slashSubmitMutation(in: textView.string, selectedRange: affectedCharRange) {
+               let mutation = MarkdownEditorStyler.slashSubmitMutation(
+                for: (textView as? SlashAwareNSTextView)?.activeSlashCommand,
+                in: textView.string,
+                selectedRange: affectedCharRange
+               ) {
                 applyMutation(
                     on: textView,
                     replacementRange: mutation.replacementRange,
@@ -951,6 +1191,33 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
 
         private func updateSlashContext(for text: String, selectedRange: NSRange) {
             slashContext = MarkdownEditorStyler.slashContext(in: text, selectedRange: selectedRange)
+        }
+
+        func handleSlashKeyboardAction(_ action: SlashCommandKeyboardAction, on textView: NSTextView) {
+            guard slashContext != nil else {
+                return
+            }
+
+            switch action {
+            case let .moveSelection(delta):
+                onMoveSlashSelection(delta)
+            case .dismiss:
+                onDismissSlashPalette()
+            case .submit:
+                guard let mutation = MarkdownEditorStyler.slashSubmitMutation(
+                    for: (textView as? SlashAwareNSTextView)?.activeSlashCommand,
+                    in: textView.string,
+                    selectedRange: textView.selectedRange()
+                ) else {
+                    return
+                }
+                applyMutation(
+                    on: textView,
+                    replacementRange: mutation.replacementRange,
+                    replacementText: mutation.replacementText,
+                    selectedRange: mutation.selectedRange
+                )
+            }
         }
     }
 }
@@ -1221,9 +1488,9 @@ private enum MarkdownEditorStyler {
         return nil
     }
 
-    static func slashSubmitMutation(in text: String, selectedRange: NSRange) -> CommandMutation? {
+    static func slashSubmitMutation(for preferredCommand: EditorSlashCommand?, in text: String, selectedRange: NSRange) -> CommandMutation? {
         guard let slashContext = slashContext(in: text, selectedRange: selectedRange),
-              let command = EditorSlashCommand.matching(query: slashContext.query).first else {
+              let command = preferredCommand ?? EditorSlashCommand.matching(query: slashContext.query).first else {
             return nil
         }
 
