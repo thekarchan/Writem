@@ -311,13 +311,19 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
                 return true
             }
 
-            guard replacementText == "\n",
-                  let continuation = MarkdownEditorStyler.enterContinuation(in: textView.text, selectedRange: range) else {
-                return true
+            if replacementText == "\n",
+               let continuation = MarkdownEditorStyler.enterContinuation(in: textView.text, selectedRange: range) {
+                applyCustomEdit(on: textView, continuation: continuation)
+                return false
             }
 
-            applyCustomEdit(on: textView, continuation: continuation)
-            return false
+            if replacementText.isEmpty,
+               let continuation = MarkdownEditorStyler.backspaceContinuation(in: textView.text, replacementRange: range) {
+                applyCustomEdit(on: textView, continuation: continuation)
+                return false
+            }
+
+            return true
         }
 
         func textViewDidChange(_ textView: UITextView) {
@@ -488,13 +494,19 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
                 return true
             }
 
-            guard replacementString == "\n",
-                  let continuation = MarkdownEditorStyler.enterContinuation(in: textView.string, selectedRange: affectedCharRange) else {
-                return true
+            if replacementString == "\n",
+               let continuation = MarkdownEditorStyler.enterContinuation(in: textView.string, selectedRange: affectedCharRange) {
+                applyCustomEdit(on: textView, continuation: continuation)
+                return false
             }
 
-            applyCustomEdit(on: textView, continuation: continuation)
-            return false
+            if replacementString?.isEmpty != false,
+               let continuation = MarkdownEditorStyler.backspaceContinuation(in: textView.string, replacementRange: affectedCharRange) {
+                applyCustomEdit(on: textView, continuation: continuation)
+                return false
+            }
+
+            return true
         }
 
         func textDidChange(_ notification: Notification) {
@@ -754,6 +766,56 @@ private enum MarkdownEditorStyler {
                 replacementText: "\n\n---",
                 caretLocation: cursorLocation + 1
             )
+        default:
+            return nil
+        }
+    }
+
+    static func backspaceContinuation(in text: String, replacementRange: NSRange) -> EnterContinuation? {
+        guard replacementRange.length == 1 else {
+            return nil
+        }
+
+        let caretLocation = replacementRange.location + replacementRange.length
+        let lineContext = activeLineContext(in: text, selectedRange: NSRange(location: caretLocation, length: 0))
+        let lineText = lineSubstring(in: text, range: lineContext.lineRange)
+        let lineEnd = lineContext.lineRange.location + lineContext.lineRange.length
+
+        switch lineContext.kind {
+        case let .heading(_, markerCount, leadingWhitespace):
+            guard caretLocation == lineEnd,
+                  headingContentIsEmpty(in: lineText, markerCount: markerCount) else {
+                return nil
+            }
+            return exitBlockContinuation(lineRange: lineContext.lineRange, leadingWhitespace: leadingWhitespace)
+        case let .quote(leadingWhitespace):
+            guard caretLocation == lineEnd,
+                  let info = quoteContinuationInfo(in: lineText, leadingWhitespace: leadingWhitespace),
+                  info.isEmpty else {
+                return nil
+            }
+            return exitBlockContinuation(lineRange: lineContext.lineRange, leadingWhitespace: leadingWhitespace)
+        case let .unorderedList(_, leadingWhitespace):
+            guard caretLocation == lineEnd,
+                  let info = unorderedListContinuationInfo(in: lineText),
+                  info.isEmpty else {
+                return nil
+            }
+            return exitBlockContinuation(lineRange: lineContext.lineRange, leadingWhitespace: leadingWhitespace)
+        case let .orderedList(_, leadingWhitespace):
+            guard caretLocation == lineEnd,
+                  let info = orderedListContinuationInfo(in: lineText),
+                  info.isEmpty else {
+                return nil
+            }
+            return exitBlockContinuation(lineRange: lineContext.lineRange, leadingWhitespace: leadingWhitespace)
+        case .codeBlock:
+            guard lineText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  caretLocation == lineContext.lineRange.location,
+                  let continuation = emptyCodeBlockContinuation(in: text, currentLineRange: lineContext.lineRange) else {
+                return nil
+            }
+            return continuation
         default:
             return nil
         }
@@ -1761,6 +1823,24 @@ private enum MarkdownEditorStyler {
         return line.distance(from: line.startIndex, to: separator)
     }
 
+    private static func exitBlockContinuation(lineRange: NSRange, leadingWhitespace: Int) -> EnterContinuation {
+        let replacementText = String(repeating: " ", count: leadingWhitespace)
+        return .init(
+            replacementRange: lineRange,
+            replacementText: replacementText,
+            caretLocation: lineRange.location + replacementText.utf16.count
+        )
+    }
+
+    private static func headingContentIsEmpty(in line: String, markerCount: Int) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard trimmed.count >= markerCount else {
+            return false
+        }
+        let content = trimmed.dropFirst(markerCount).drop { $0 == " " }
+        return content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private static func lineSubstring(in text: String, range: NSRange) -> String {
         guard range.location != NSNotFound,
               let textRange = Range(range, in: text) else {
@@ -1819,6 +1899,50 @@ private enum MarkdownEditorStyler {
             return nil
         }
         return String(repeating: " ", count: leadingWhitespaceCount(in: line)) + "```"
+    }
+
+    private static func emptyCodeBlockContinuation(in text: String, currentLineRange: NSRange) -> EnterContinuation? {
+        let records = lineRecords(in: text)
+        guard let index = records.firstIndex(where: { $0.range == currentLineRange }),
+              index > 0,
+              index + 1 < records.count else {
+            return nil
+        }
+
+        let current = records[index]
+        let previous = records[index - 1]
+        let next = records[index + 1]
+
+        guard current.line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              previous.line.trimmingCharacters(in: .whitespaces).hasPrefix("```"),
+              next.line.trimmingCharacters(in: .whitespaces).hasPrefix("```") else {
+            return nil
+        }
+
+        let replacementStart = previous.range.location
+        let replacementEnd = next.fullRange.location + next.fullRange.length
+        return .init(
+            replacementRange: NSRange(location: replacementStart, length: replacementEnd - replacementStart),
+            replacementText: "",
+            caretLocation: replacementStart
+        )
+    }
+
+    private static func lineRecords(in text: String) -> [(range: NSRange, fullRange: NSRange, line: String)] {
+        let lines = text.components(separatedBy: "\n")
+        var records: [(range: NSRange, fullRange: NSRange, line: String)] = []
+        var location = 0
+
+        for (index, line) in lines.enumerated() {
+            let lineLength = (line as NSString).length
+            let terminatorLength = index < lines.count - 1 ? 1 : 0
+            let range = NSRange(location: location, length: lineLength)
+            let fullRange = NSRange(location: location, length: lineLength + terminatorLength)
+            records.append((range: range, fullRange: fullRange, line: line))
+            location += lineLength + terminatorLength
+        }
+
+        return records
     }
 
     private static func hasClosingCodeFence(after location: Int, in text: String) -> Bool {
