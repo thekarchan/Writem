@@ -5,6 +5,7 @@ Dates use the local repository commit date.
 
 ## 2026-03-12
 
+- Merge Auto, Light, and Dark into a single Theme submenu
 - Use a native single-choice Theme picker in the View menu
 - Make Show Toolbar a native action item and move auto theme under Theme
 - Simplify View appearance controls into top-level auto theme and a Theme submenu

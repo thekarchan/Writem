@@ -113,29 +113,30 @@ private struct EditorViewCommands: Commands {
                 settings.showToolbar.toggle()
             }
 
-            Toggle("Auto Switch Dark Theme", isOn: autoThemeBinding)
-
             Menu("Theme") {
                 Picker("Theme", selection: preferredThemeBinding) {
+                    Text("Auto").tag(EditorTheme.system)
                     Text("Light").tag(EditorTheme.light)
                     Text("Dark").tag(EditorTheme.dark)
                 }
-                .disabled(settings.autoThemeEnabled)
             }
         }
     }
 
-    private var autoThemeBinding: Binding<Bool> {
-        Binding(
-            get: { settings.autoThemeEnabled },
-            set: { settings.autoThemeEnabled = $0 }
-        )
-    }
-
     private var preferredThemeBinding: Binding<EditorTheme> {
         Binding(
-            get: { settings.preferredTheme },
-            set: { settings.preferredTheme = $0 }
+            get: {
+                settings.autoThemeEnabled ? .system : settings.preferredTheme
+            },
+            set: { newValue in
+                switch newValue {
+                case .system:
+                    settings.autoThemeEnabled = true
+                case .light, .dark:
+                    settings.autoThemeEnabled = false
+                    settings.preferredTheme = newValue
+                }
+            }
         )
     }
 }
