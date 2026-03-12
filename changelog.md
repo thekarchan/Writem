@@ -5,6 +5,7 @@ Dates use the local repository commit date.
 
 ## 2026-03-12
 
+- Flatten View menu controls so Show Toolbar and Appearance sit at the top level
 - Add editable writing font controls under Edit and sync them across editor settings
 - Reorganize the File menu into Draft, Open, and Save groups with Reveal in Finder
 - Add a Help menu markdown syntax reference window

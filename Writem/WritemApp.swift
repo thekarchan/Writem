@@ -109,9 +109,7 @@ private struct EditorViewCommands: Commands {
         CommandGroup(after: .toolbar) {
             Divider()
 
-            Menu("Editor") {
-                Toggle(settings.showToolbar ? "Hide Toolbar" : "Show Toolbar", isOn: toolbarBinding)
-            }
+            Toggle(settings.showToolbar ? "Hide Toolbar" : "Show Toolbar", isOn: toolbarBinding)
 
             Menu("Appearance") {
                 Toggle("Auto Switch Dark Theme", isOn: autoThemeBinding)
