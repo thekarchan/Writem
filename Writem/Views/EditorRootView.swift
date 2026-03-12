@@ -27,6 +27,7 @@ struct EditorRootView: View {
     @State private var pendingExport: ExportArtifact?
     @State private var isExportingFile = false
     @State private var pendingCanvasCommand: EditorCanvasCommand?
+    @State private var pendingImageImportInsertionRange: NSRange?
 
     @EnvironmentObject private var settings: EditorSettingsStore
 
@@ -79,10 +80,16 @@ struct EditorRootView: View {
             allowedContentTypes: [.image],
             allowsMultipleSelection: true
         ) { result in
+            let insertionRange = pendingImageImportInsertionRange
+            pendingImageImportInsertionRange = nil
+
             switch result {
             case .success(let urls):
-                _ = importImages(from: urls)
+                _ = importImages(from: urls, replacing: insertionRange)
             case .failure(let error):
+                guard (error as NSError).code != NSUserCancelledError else {
+                    return
+                }
                 editorAlert = .init(title: "Image import failed", message: error.localizedDescription)
             }
         }
@@ -185,7 +192,7 @@ struct EditorRootView: View {
 
                     Section("Assets") {
                         Button {
-                            isImportingImages = true
+                            requestImageImport()
                         } label: {
                             Label("Import Image", systemImage: "photo")
                         }
@@ -480,7 +487,7 @@ struct EditorRootView: View {
     }
 
     @discardableResult
-    private func importImages(from urls: [URL]) -> Bool {
+    private func importImages(from urls: [URL], replacing replacementRange: NSRange? = nil) -> Bool {
         let imageURLs = urls.filter { ImageResourceManager.canImport($0) }
         guard !imageURLs.isEmpty else {
             editorAlert = .init(title: "Image import failed", message: "No supported image files were selected.")
@@ -494,7 +501,21 @@ struct EditorRootView: View {
             }
 
             let references = importedAssets.map(\.markdownReference)
-            document.text = appendedMarkdownReferences(references, to: document.text)
+            if let replacementRange {
+                let replacementText = references.joined(separator: "\n\n")
+                let clampedRange = clamped(replacementRange, maxLength: document.text.utf16.count)
+                issueCanvasCommand(
+                    .replace(
+                        .init(
+                            replacementRange: clampedRange,
+                            replacementText: replacementText,
+                            selectedRange: NSRange(location: clampedRange.location + replacementText.utf16.count, length: 0)
+                        )
+                    )
+                )
+            } else {
+                document.text = appendedMarkdownReferences(references, to: document.text)
+            }
             lastImportedAsset = importedAssets.last
             return true
         } catch {
@@ -517,6 +538,25 @@ struct EditorRootView: View {
         return trimmed + "\n\n" + insertion + "\n"
     }
 
+    private func requestImageImport(at replacementRange: NSRange? = nil) {
+        guard fileURL != nil else {
+            editorAlert = .init(
+                title: "Image import unavailable",
+                message: ImageResourceError.unsavedDocument.localizedDescription
+            )
+            return
+        }
+
+        pendingImageImportInsertionRange = replacementRange
+        isImportingImages = true
+    }
+
+    private func clamped(_ range: NSRange, maxLength: Int) -> NSRange {
+        let location = min(max(range.location, 0), maxLength)
+        let length = min(max(range.length, 0), max(maxLength - location, 0))
+        return NSRange(location: location, length: length)
+    }
+
     private var editorBackground: some View {
         LinearGradient(
             colors: [
@@ -534,7 +574,10 @@ struct EditorRootView: View {
             text: $document.text,
             lineWidth: settings.lineWidthPreset.width,
             command: pendingCanvasCommand,
-            onDropImageFiles: importImages(from:),
+            onDropImageFiles: { urls in
+                importImages(from: urls)
+            },
+            onRequestImageImport: requestImageImport,
             onCommandHandled: handleCanvasCommand
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -16,34 +16,160 @@ struct SlashCommandContext: Equatable {
     let leadingWhitespace: Int
 }
 
+enum SlashTemplateAction: Equatable {
+    case insert(String)
+    case requestImageImport
+}
+
+struct EditorSlashTemplate: Identifiable, Equatable {
+    let id: String
+    let title: String
+    let symbolName: String
+    let detail: String
+    let action: SlashTemplateAction
+}
+
 struct EditorSlashCommand: Identifiable, Equatable {
     let id: String
     let title: String
     let symbolName: String
     let detail: String
     let aliases: [String]
-    let snippet: Snippet
+    let primaryTemplate: EditorSlashTemplate
+    let secondaryTemplates: [EditorSlashTemplate]
 
-    static let all: [EditorSlashCommand] = SnippetLibrary.all.map { snippet in
-        switch snippet.id {
-        case "heading":
-            return .init(id: snippet.id, title: "Heading", symbolName: snippet.symbolName, detail: "/heading", aliases: ["h1", "title", "section"], snippet: snippet)
-        case "list":
-            return .init(id: snippet.id, title: "Bullet List", symbolName: snippet.symbolName, detail: "/list", aliases: ["bullet", "ul", "points"], snippet: snippet)
-        case "quote":
-            return .init(id: snippet.id, title: "Quote", symbolName: snippet.symbolName, detail: "/quote", aliases: ["blockquote", "callout"], snippet: snippet)
-        case "code":
-            return .init(id: snippet.id, title: "Code Block", symbolName: snippet.symbolName, detail: "/code", aliases: ["fence", "snippet"], snippet: snippet)
-        case "table":
-            return .init(id: snippet.id, title: "Table", symbolName: snippet.symbolName, detail: "/table", aliases: ["grid", "spreadsheet"], snippet: snippet)
-        case "divider":
-            return .init(id: snippet.id, title: "Divider", symbolName: snippet.symbolName, detail: "/divider", aliases: ["hr", "rule", "separator"], snippet: snippet)
-        case "image":
-            return .init(id: snippet.id, title: "Image", symbolName: snippet.symbolName, detail: "/image", aliases: ["photo", "media", "figure"], snippet: snippet)
-        default:
-            return .init(id: snippet.id, title: snippet.title, symbolName: snippet.symbolName, detail: "/\(snippet.id)", aliases: [], snippet: snippet)
-        }
+    var canExpand: Bool {
+        !secondaryTemplates.isEmpty
     }
+
+    static let all: [EditorSlashCommand] = [
+        .init(
+            id: "heading",
+            title: "Heading",
+            symbolName: "textformat.size",
+            detail: "/heading",
+            aliases: ["h1", "title", "section"],
+            primaryTemplate: .insert(
+                id: "heading-h1",
+                title: "Heading 1",
+                symbolName: "textformat.size.larger",
+                detail: "# New section",
+                content: "# New section"
+            ),
+            secondaryTemplates: [
+                .insert(id: "heading-h1", title: "Heading 1", symbolName: "textformat.size.larger", detail: "# New section", content: "# New section"),
+                .insert(id: "heading-h2", title: "Heading 2", symbolName: "textformat.size", detail: "## New subsection", content: "## New subsection"),
+                .insert(id: "heading-h3", title: "Heading 3", symbolName: "textformat", detail: "### Supporting point", content: "### Supporting point")
+            ]
+        ),
+        .init(
+            id: "list",
+            title: "List",
+            symbolName: "list.bullet",
+            detail: "/list",
+            aliases: ["bullet", "ul", "points"],
+            primaryTemplate: .insert(
+                id: "list-bullets",
+                title: "Bullet List",
+                symbolName: "list.bullet",
+                detail: "- First point",
+                content: "- First point\n- Second point\n- Third point"
+            ),
+            secondaryTemplates: [
+                .insert(id: "list-bullets", title: "Bullet List", symbolName: "list.bullet", detail: "- First point", content: "- First point\n- Second point\n- Third point"),
+                .insert(id: "list-numbered", title: "Numbered List", symbolName: "list.number", detail: "1. First step", content: "1. First step\n2. Second step\n3. Third step"),
+                .insert(id: "list-checklist", title: "Checklist", symbolName: "checklist", detail: "- [ ] First task", content: "- [ ] First task\n- [ ] Second task\n- [ ] Third task")
+            ]
+        ),
+        .init(
+            id: "quote",
+            title: "Quote",
+            symbolName: "text.quote",
+            detail: "/quote",
+            aliases: ["blockquote", "callout"],
+            primaryTemplate: .insert(
+                id: "quote-standard",
+                title: "Quote",
+                symbolName: "text.quote",
+                detail: "> A highlighted quote block",
+                content: "> A highlighted quote block"
+            ),
+            secondaryTemplates: [
+                .insert(id: "quote-standard", title: "Quote", symbolName: "text.quote", detail: "> A highlighted quote block", content: "> A highlighted quote block"),
+                .insert(id: "quote-note", title: "Note", symbolName: "note.text", detail: "> **Note:** Add supporting context", content: "> **Note:** Add supporting context"),
+                .insert(id: "quote-pull", title: "Pull Quote", symbolName: "quote.bubble", detail: "> Memorable line\n>\n> Author", content: "> Memorable line\n>\n> Author")
+            ]
+        ),
+        .init(
+            id: "code",
+            title: "Code Block",
+            symbolName: "curlybraces",
+            detail: "/code",
+            aliases: ["fence", "snippet"],
+            primaryTemplate: .insert(
+                id: "code-swift",
+                title: "Swift",
+                symbolName: "swift",
+                detail: "```swift",
+                content: "```swift\nprint(\"Hello, Writem\")\n```"
+            ),
+            secondaryTemplates: [
+                .insert(id: "code-swift", title: "Swift", symbolName: "swift", detail: "```swift", content: "```swift\nprint(\"Hello, Writem\")\n```"),
+                .insert(id: "code-js", title: "JavaScript", symbolName: "curlybraces.square", detail: "```js", content: "```js\nconsole.log(\"Hello, Writem\")\n```"),
+                .insert(id: "code-bash", title: "Shell", symbolName: "terminal", detail: "```bash", content: "```bash\nwritem build\n```"),
+                .insert(id: "code-json", title: "JSON", symbolName: "number.square", detail: "```json", content: "```json\n{\n  \"title\": \"Writem\"\n}\n```"),
+                .insert(id: "code-mermaid", title: "Mermaid", symbolName: "point.3.filled.connected.trianglepath.dotted", detail: "```mermaid", content: "```mermaid\ngraph TD\n    A[Start] --> B[Write]\n```")
+            ]
+        ),
+        .init(
+            id: "table",
+            title: "Table",
+            symbolName: "tablecells",
+            detail: "/table",
+            aliases: ["grid", "spreadsheet"],
+            primaryTemplate: .insert(
+                id: "table-basic",
+                title: "Two Columns",
+                symbolName: "tablecells",
+                detail: "| Column A | Column B |",
+                content: "| Column A | Column B |\n| --- | --- |\n| Value | Value |"
+            ),
+            secondaryTemplates: [
+                .insert(id: "table-basic", title: "Two Columns", symbolName: "tablecells", detail: "| Column A | Column B |", content: "| Column A | Column B |\n| --- | --- |\n| Value | Value |"),
+                .insert(id: "table-three", title: "Three Columns", symbolName: "square.split.3x1", detail: "| Column A | Column B | Column C |", content: "| Column A | Column B | Column C |\n| --- | --- | --- |\n| Value | Value | Value |"),
+                .insert(id: "table-compare", title: "Comparison", symbolName: "arrow.left.arrow.right.square", detail: "| Option | Pros | Cons |", content: "| Option | Pros | Cons |\n| --- | --- | --- |\n| A | Fast | Limited |\n| B | Flexible | More setup |")
+            ]
+        ),
+        .init(
+            id: "divider",
+            title: "Divider",
+            symbolName: "minus",
+            detail: "/divider",
+            aliases: ["hr", "rule", "separator"],
+            primaryTemplate: .insert(
+                id: "divider-standard",
+                title: "Divider",
+                symbolName: "minus",
+                detail: "---",
+                content: "---"
+            ),
+            secondaryTemplates: []
+        ),
+        .init(
+            id: "image",
+            title: "Image",
+            symbolName: "photo",
+            detail: "/image",
+            aliases: ["photo", "media", "figure"],
+            primaryTemplate: .imageImport(
+                id: "image-import",
+                title: "Import Image",
+                symbolName: "photo.badge.plus",
+                detail: "Open the image picker"
+            ),
+            secondaryTemplates: []
+        )
+    ]
 
     static func matching(query: String) -> [EditorSlashCommand] {
         let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -63,6 +189,16 @@ struct EditorSlashCommand: Identifiable, Equatable {
     }
 }
 
+private extension EditorSlashTemplate {
+    static func insert(id: String, title: String, symbolName: String, detail: String, content: String) -> Self {
+        .init(id: id, title: title, symbolName: symbolName, detail: detail, action: .insert(content))
+    }
+
+    static func imageImport(id: String, title: String, symbolName: String, detail: String) -> Self {
+        .init(id: id, title: title, symbolName: symbolName, detail: detail, action: .requestImageImport)
+    }
+}
+
 struct EditorCanvasReplacement: Equatable {
     let replacementRange: NSRange
     let replacementText: String
@@ -72,6 +208,8 @@ struct EditorCanvasReplacement: Equatable {
 private enum SlashCommandKeyboardAction {
     case moveSelection(Int)
     case submit
+    case expand
+    case collapse
     case dismiss
 }
 
@@ -94,12 +232,15 @@ struct EditorCanvasView: View {
     let lineWidth: CGFloat
     let command: EditorCanvasCommand?
     let onDropImageFiles: ([URL]) -> Bool
+    let onRequestImageImport: (NSRange) -> Void
     let onCommandHandled: (UUID) -> Void
 
     @State private var isImageDropTarget = false
     @State private var shouldFocusEditor = false
     @State private var slashContext: SlashCommandContext?
     @State private var selectedSlashCommandID: String?
+    @State private var expandedSlashCommandID: String?
+    @State private var selectedSlashTemplateID: String?
     @State private var pendingLocalCommand: EditorCanvasCommand?
 
     private var activeCommand: EditorCanvasCommand? {
@@ -108,6 +249,10 @@ struct EditorCanvasView: View {
 
     private var visibleSlashCommandIDs: [String] {
         visibleSlashCommands.map(\.id)
+    }
+
+    private var visibleSlashTemplateIDs: [String] {
+        visibleSlashTemplates.map(\.id)
     }
 
     var body: some View {
@@ -144,6 +289,9 @@ struct EditorCanvasView: View {
             .onChange(of: visibleSlashCommandIDs) { _, _ in
                 syncSlashSelection()
             }
+            .onChange(of: visibleSlashTemplateIDs) { _, _ in
+                syncSlashSelection()
+            }
     }
 
     private var centeredEditor: some View {
@@ -156,11 +304,18 @@ struct EditorCanvasView: View {
                 onCommandHandled: handleCommandHandled,
                 slashContext: $slashContext,
                 visibleSlashCommands: visibleSlashCommands,
+                visibleSlashTemplates: visibleSlashTemplates,
                 selectedSlashCommandID: selectedSlashCommandID,
-                activeSlashCommand: activeSlashCommand,
+                selectedSlashTemplateID: selectedSlashTemplateID,
+                expandedSlashCommand: expandedSlashCommand,
                 onSelectSlashCommand: issueSlashCommand,
+                onSelectSlashTemplate: issueSlashTemplate,
+                onSubmitSlashSelection: submitSlashSelection,
+                onExpandActiveSlashCommand: { expandSlashTemplates(for: activeSlashCommand) },
+                onExpandSpecificSlashCommand: { expandSlashTemplates(for: $0) },
                 onMoveSlashSelection: moveSlashSelection,
-                onDismissSlashPalette: dismissSlashPalette
+                onCollapseSlashTemplates: collapseSlashTemplates,
+                onDismissSlashPalette: cancelSlashPalette
             )
                 .frame(maxWidth: lineWidth, maxHeight: .infinity)
                 .padding(.top, 24)
@@ -187,46 +342,152 @@ struct EditorCanvasView: View {
         return visibleSlashCommands.first
     }
 
+    private var expandedSlashCommand: EditorSlashCommand? {
+        guard let expandedSlashCommandID else {
+            return nil
+        }
+
+        return visibleSlashCommands.first(where: { $0.id == expandedSlashCommandID })
+    }
+
+    private var visibleSlashTemplates: [EditorSlashTemplate] {
+        expandedSlashCommand?.secondaryTemplates ?? []
+    }
+
+    private var activeSlashTemplate: EditorSlashTemplate? {
+        if let selectedSlashTemplateID,
+           let selectedTemplate = visibleSlashTemplates.first(where: { $0.id == selectedSlashTemplateID }) {
+            return selectedTemplate
+        }
+
+        return visibleSlashTemplates.first
+    }
+
     private func issueSlashCommand(_ slashCommand: EditorSlashCommand, context: SlashCommandContext) {
-        let replacement = MarkdownEditorStyler.replacement(for: slashCommand, context: context)
-        pendingLocalCommand = EditorCanvasCommand(action: .replace(replacement))
+        issueSlashTemplate(slashCommand.primaryTemplate, context: context)
+    }
+
+    private func issueSlashTemplate(_ template: EditorSlashTemplate, context: SlashCommandContext) {
+        switch template.action {
+        case let .insert(content):
+            let replacement = MarkdownEditorStyler.replacement(for: content, context: context)
+            pendingLocalCommand = EditorCanvasCommand(action: .replace(replacement))
+        case .requestImageImport:
+            dismissSlashPalette()
+            onRequestImageImport(context.replacementRange)
+        }
     }
 
     private func moveSlashSelection(by delta: Int) {
-        guard !visibleSlashCommands.isEmpty else {
-            selectedSlashCommandID = nil
+        if expandedSlashCommand != nil {
+            guard !visibleSlashTemplates.isEmpty else {
+                selectedSlashTemplateID = nil
+                return
+            }
+
+            let currentIndex = activeSlashTemplate.flatMap { template in
+                visibleSlashTemplates.firstIndex(where: { $0.id == template.id })
+            } ?? 0
+            let targetIndex = min(max(currentIndex + delta, 0), visibleSlashTemplates.count - 1)
+            selectedSlashTemplateID = visibleSlashTemplates[targetIndex].id
+        } else {
+            guard !visibleSlashCommands.isEmpty else {
+                selectedSlashCommandID = nil
+                return
+            }
+
+            let currentIndex = activeSlashCommand.flatMap { command in
+                visibleSlashCommands.firstIndex(where: { $0.id == command.id })
+            } ?? 0
+            let targetIndex = min(max(currentIndex + delta, 0), visibleSlashCommands.count - 1)
+            selectedSlashCommandID = visibleSlashCommands[targetIndex].id
+        }
+    }
+
+    private func submitSlashSelection() {
+        guard let slashContext else {
             return
         }
 
-        let currentIndex = activeSlashCommand.flatMap { command in
-            visibleSlashCommands.firstIndex(where: { $0.id == command.id })
-        } ?? 0
-        let targetIndex = min(max(currentIndex + delta, 0), visibleSlashCommands.count - 1)
-        selectedSlashCommandID = visibleSlashCommands[targetIndex].id
+        if let activeSlashTemplate {
+            issueSlashTemplate(activeSlashTemplate, context: slashContext)
+            return
+        }
+
+        guard let activeSlashCommand else {
+            return
+        }
+
+        issueSlashCommand(activeSlashCommand, context: slashContext)
+    }
+
+    private func expandSlashTemplates(for command: EditorSlashCommand?) {
+        guard let command, command.canExpand else {
+            return
+        }
+
+        selectedSlashCommandID = command.id
+        expandedSlashCommandID = command.id
+        selectedSlashTemplateID = command.secondaryTemplates.first?.id
+    }
+
+    private func collapseSlashTemplates() {
+        expandedSlashCommandID = nil
+        selectedSlashTemplateID = nil
+    }
+
+    private func cancelSlashPalette() {
+        if expandedSlashCommand != nil {
+            collapseSlashTemplates()
+        } else {
+            dismissSlashPalette()
+        }
     }
 
     private func dismissSlashPalette() {
         slashContext = nil
         selectedSlashCommandID = nil
+        expandedSlashCommandID = nil
+        selectedSlashTemplateID = nil
     }
 
     private func syncSlashSelection() {
         guard slashContext != nil else {
             selectedSlashCommandID = nil
+            expandedSlashCommandID = nil
+            selectedSlashTemplateID = nil
             return
         }
 
         guard !visibleSlashCommands.isEmpty else {
             selectedSlashCommandID = nil
+            expandedSlashCommandID = nil
+            selectedSlashTemplateID = nil
             return
         }
 
         if let selectedSlashCommandID,
            visibleSlashCommands.contains(where: { $0.id == selectedSlashCommandID }) {
+        } else {
+            selectedSlashCommandID = visibleSlashCommands.first?.id
+        }
+
+        guard let expandedSlashCommand else {
+            selectedSlashTemplateID = nil
             return
         }
 
-        selectedSlashCommandID = visibleSlashCommands.first?.id
+        guard expandedSlashCommand.canExpand, !visibleSlashTemplates.isEmpty else {
+            collapseSlashTemplates()
+            return
+        }
+
+        if let selectedSlashTemplateID,
+           visibleSlashTemplates.contains(where: { $0.id == selectedSlashTemplateID }) {
+            return
+        }
+
+        selectedSlashTemplateID = visibleSlashTemplates.first?.id
     }
 
     private func handleCommandHandled(_ commandID: UUID) {
@@ -246,10 +507,17 @@ private struct MarkdownWritingTextView: View {
     let onCommandHandled: (UUID) -> Void
     @Binding var slashContext: SlashCommandContext?
     let visibleSlashCommands: [EditorSlashCommand]
+    let visibleSlashTemplates: [EditorSlashTemplate]
     let selectedSlashCommandID: String?
-    let activeSlashCommand: EditorSlashCommand?
+    let selectedSlashTemplateID: String?
+    let expandedSlashCommand: EditorSlashCommand?
     let onSelectSlashCommand: (EditorSlashCommand, SlashCommandContext) -> Void
+    let onSelectSlashTemplate: (EditorSlashTemplate, SlashCommandContext) -> Void
+    let onSubmitSlashSelection: () -> Void
+    let onExpandActiveSlashCommand: () -> Void
+    let onExpandSpecificSlashCommand: (EditorSlashCommand) -> Void
     let onMoveSlashSelection: (Int) -> Void
+    let onCollapseSlashTemplates: () -> Void
     let onDismissSlashPalette: () -> Void
 
     private var layoutProfile: WritingLayoutProfile {
@@ -310,8 +578,11 @@ private struct MarkdownWritingTextView: View {
                 command: command,
                 onCommandHandled: onCommandHandled,
                 slashContext: $slashContext,
-                activeSlashCommand: activeSlashCommand,
                 onMoveSlashSelection: onMoveSlashSelection,
+                onSubmitSlashSelection: onSubmitSlashSelection,
+                onExpandSlashTemplates: onExpandActiveSlashCommand,
+                onCollapseSlashTemplates: onCollapseSlashTemplates,
+                isShowingSlashTemplates: expandedSlashCommand != nil,
                 onDismissSlashPalette: onDismissSlashPalette
             )
                 .padding(.horizontal, 42)
@@ -321,11 +592,21 @@ private struct MarkdownWritingTextView: View {
             if let slashContext {
                 SlashCommandPaletteView(
                     commands: visibleSlashCommands,
+                    templates: visibleSlashTemplates,
                     selectedCommandID: selectedSlashCommandID,
+                    selectedTemplateID: selectedSlashTemplateID,
+                    expandedCommand: expandedSlashCommand,
                     query: slashContext.query,
-                    onSelect: { command in
+                    onSelectCommand: { command in
                         onSelectSlashCommand(command, slashContext)
-                    }
+                    },
+                    onSelectTemplate: { template in
+                        onSelectSlashTemplate(template, slashContext)
+                    },
+                    onExpandCommand: { command in
+                        onExpandSpecificSlashCommand(command)
+                    },
+                    onCollapse: onCollapseSlashTemplates
                 )
                 .padding(.top, 26)
                 .padding(.leading, 30)
@@ -439,31 +720,86 @@ private struct WritingLayoutProfile {
 
 private struct SlashCommandPaletteView: View {
     let commands: [EditorSlashCommand]
+    let templates: [EditorSlashTemplate]
     let selectedCommandID: String?
+    let selectedTemplateID: String?
+    let expandedCommand: EditorSlashCommand?
     let query: String
-    let onSelect: (EditorSlashCommand) -> Void
+    let onSelectCommand: (EditorSlashCommand) -> Void
+    let onSelectTemplate: (EditorSlashTemplate) -> Void
+    let onExpandCommand: (EditorSlashCommand) -> Void
+    let onCollapse: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Image(systemName: "command")
+                Image(systemName: expandedCommand == nil ? "command" : "arrow.turn.down.right")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(Color(red: 0.53, green: 0.47, blue: 0.42))
-                Text(query.isEmpty ? "Commands" : "/\(query)")
-                    .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(Color(red: 0.34, green: 0.29, blue: 0.25))
+
+                if let expandedCommand {
+                    Button {
+                        onCollapse()
+                    } label: {
+                        Text(expandedCommand.title)
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .foregroundStyle(Color(red: 0.34, green: 0.29, blue: 0.25))
+                    }
+                    .buttonStyle(.plain)
+
+                    Text("Templates")
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(query.isEmpty ? "Commands" : "/\(query)")
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(Color(red: 0.34, green: 0.29, blue: 0.25))
+                }
             }
 
-            if commands.isEmpty {
-                Text("No matching commands")
-                    .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 8)
+            if expandedCommand == nil {
+                commandRows
             } else {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(commands) { command in
+                templateRows
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(width: 252, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.96),
+                            Color(red: 0.992, green: 0.989, blue: 0.982)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color(red: 0.58, green: 0.53, blue: 0.47).opacity(0.14), lineWidth: 0.8)
+        }
+        .shadow(color: Color.black.opacity(0.045), radius: 14, x: 0, y: 8)
+        .shadow(color: Color(red: 0.36, green: 0.31, blue: 0.27).opacity(0.08), radius: 28, x: 0, y: 14)
+    }
+
+    @ViewBuilder
+    private var commandRows: some View {
+        if commands.isEmpty {
+            Text("No matching commands")
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(.secondary)
+                .padding(.vertical, 8)
+        } else {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(commands) { command in
+                    HStack(spacing: 6) {
                         Button {
-                            onSelect(command)
+                            onSelectCommand(command)
                         } label: {
                             HStack(spacing: 10) {
                                 Image(systemName: command.symbolName)
@@ -495,39 +831,77 @@ private struct SlashCommandPaletteView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+
+                        if command.canExpand {
+                            Button {
+                                onExpandCommand(command)
+                            } label: {
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(Color.secondary.opacity(0.85))
+                                    .frame(width: 22, height: 28)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
                 }
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .frame(width: 230, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.96),
-                            Color(red: 0.992, green: 0.989, blue: 0.982)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color(red: 0.58, green: 0.53, blue: 0.47).opacity(0.14), lineWidth: 0.8)
+    }
+
+    @ViewBuilder
+    private var templateRows: some View {
+        if templates.isEmpty {
+            Text("No templates available")
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(.secondary)
+                .padding(.vertical, 8)
+        } else {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(templates) { template in
+                    Button {
+                        onSelectTemplate(template)
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: template.symbolName)
+                                .font(.system(size: 12.5, weight: .semibold))
+                                .frame(width: 18)
+                                .foregroundStyle(Color(red: 0.52, green: 0.45, blue: 0.39))
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(template.title)
+                                    .font(.system(size: 12.5, weight: .medium))
+                                    .foregroundStyle(Color(red: 0.16, green: 0.15, blue: 0.14))
+                                Text(template.detail)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(
+                                    template.id == selectedTemplateID
+                                        ? Color(red: 0.94, green: 0.91, blue: 0.86)
+                                        : Color.clear
+                                )
+                        )
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
-        .shadow(color: Color.black.opacity(0.045), radius: 14, x: 0, y: 8)
-        .shadow(color: Color(red: 0.36, green: 0.31, blue: 0.27).opacity(0.08), radius: 28, x: 0, y: 14)
     }
 }
 
 #if canImport(UIKit)
 private final class SlashAwareTextView: UITextView {
     var slashPaletteEnabled = false
-    var activeSlashCommand: EditorSlashCommand?
+    var isSlashTemplateExpanded = false
     var onSlashAction: ((SlashCommandKeyboardAction) -> Void)?
 
     override var keyCommands: [UIKeyCommand]? {
@@ -538,6 +912,9 @@ private final class SlashAwareTextView: UITextView {
         return [
             UIKeyCommand(input: UIKeyCommand.inputUpArrow, modifierFlags: [], action: #selector(handleSlashMoveUp)),
             UIKeyCommand(input: UIKeyCommand.inputDownArrow, modifierFlags: [], action: #selector(handleSlashMoveDown)),
+            UIKeyCommand(input: UIKeyCommand.inputRightArrow, modifierFlags: [], action: #selector(handleSlashExpand)),
+            UIKeyCommand(input: UIKeyCommand.inputLeftArrow, modifierFlags: [], action: #selector(handleSlashCollapse)),
+            UIKeyCommand(input: "\r", modifierFlags: .command, action: #selector(handleSlashExpand)),
             UIKeyCommand(input: "\t", modifierFlags: [], action: #selector(handleSlashSubmit)),
             UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(handleSlashDismiss))
         ] + (super.keyCommands ?? [])
@@ -555,6 +932,14 @@ private final class SlashAwareTextView: UITextView {
         onSlashAction?(.submit)
     }
 
+    @objc private func handleSlashExpand() {
+        onSlashAction?(.expand)
+    }
+
+    @objc private func handleSlashCollapse() {
+        onSlashAction?(.collapse)
+    }
+
     @objc private func handleSlashDismiss() {
         onSlashAction?(.dismiss)
     }
@@ -567,8 +952,11 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
     let command: EditorCanvasCommand?
     let onCommandHandled: (UUID) -> Void
     @Binding var slashContext: SlashCommandContext?
-    let activeSlashCommand: EditorSlashCommand?
     let onMoveSlashSelection: (Int) -> Void
+    let onSubmitSlashSelection: () -> Void
+    let onExpandSlashTemplates: () -> Void
+    let onCollapseSlashTemplates: () -> Void
+    let isShowingSlashTemplates: Bool
     let onDismissSlashPalette: () -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -577,6 +965,9 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
             isFocused: $isFocused,
             slashContext: $slashContext,
             onMoveSlashSelection: onMoveSlashSelection,
+            onSubmitSlashSelection: onSubmitSlashSelection,
+            onExpandSlashTemplates: onExpandSlashTemplates,
+            onCollapseSlashTemplates: onCollapseSlashTemplates,
             onDismissSlashPalette: onDismissSlashPalette
         )
     }
@@ -606,7 +997,7 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
         context.coordinator.applyCommandIfNeeded(command, on: textView, onCommandHandled: onCommandHandled)
         if let textView = textView as? SlashAwareTextView {
             textView.slashPaletteEnabled = slashContext != nil
-            textView.activeSlashCommand = activeSlashCommand
+            textView.isSlashTemplateExpanded = isShowingSlashTemplates
             textView.onSlashAction = { [weak textView, weak coordinator = context.coordinator] action in
                 guard let textView, let coordinator else {
                     return
@@ -636,6 +1027,9 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
         @Binding private var isFocused: Bool
         @Binding private var slashContext: SlashCommandContext?
         private let onMoveSlashSelection: (Int) -> Void
+        private let onSubmitSlashSelection: () -> Void
+        private let onExpandSlashTemplates: () -> Void
+        private let onCollapseSlashTemplates: () -> Void
         private let onDismissSlashPalette: () -> Void
         private var isApplyingUpdate = false
         private var lastFocusedParagraphRange: NSRange?
@@ -646,12 +1040,18 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
             isFocused: Binding<Bool>,
             slashContext: Binding<SlashCommandContext?>,
             onMoveSlashSelection: @escaping (Int) -> Void,
+            onSubmitSlashSelection: @escaping () -> Void,
+            onExpandSlashTemplates: @escaping () -> Void,
+            onCollapseSlashTemplates: @escaping () -> Void,
             onDismissSlashPalette: @escaping () -> Void
         ) {
             _text = text
             _isFocused = isFocused
             _slashContext = slashContext
             self.onMoveSlashSelection = onMoveSlashSelection
+            self.onSubmitSlashSelection = onSubmitSlashSelection
+            self.onExpandSlashTemplates = onExpandSlashTemplates
+            self.onCollapseSlashTemplates = onCollapseSlashTemplates
             self.onDismissSlashPalette = onDismissSlashPalette
         }
 
@@ -681,18 +1081,8 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
                 return true
             }
 
-            if replacementText == "\n",
-               let mutation = MarkdownEditorStyler.slashSubmitMutation(
-                for: (textView as? SlashAwareTextView)?.activeSlashCommand,
-                in: textView.text,
-                selectedRange: range
-               ) {
-                applyMutation(
-                    on: textView,
-                    replacementRange: mutation.replacementRange,
-                    replacementText: mutation.replacementText,
-                    selectedRange: mutation.selectedRange
-                )
+            if replacementText == "\n", slashContext != nil {
+                onSubmitSlashSelection()
                 return false
             }
 
@@ -836,22 +1226,22 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
             switch action {
             case let .moveSelection(delta):
                 onMoveSlashSelection(delta)
-            case .dismiss:
-                onDismissSlashPalette()
-            case .submit:
-                guard let mutation = MarkdownEditorStyler.slashSubmitMutation(
-                    for: (textView as? SlashAwareTextView)?.activeSlashCommand,
-                    in: textView.text,
-                    selectedRange: textView.selectedRange
-                ) else {
-                    return
+            case .expand:
+                if let textView = textView as? SlashAwareTextView, textView.isSlashTemplateExpanded {
+                    onSubmitSlashSelection()
+                } else {
+                    onExpandSlashTemplates()
                 }
-                applyMutation(
-                    on: textView,
-                    replacementRange: mutation.replacementRange,
-                    replacementText: mutation.replacementText,
-                    selectedRange: mutation.selectedRange
-                )
+            case .collapse:
+                onCollapseSlashTemplates()
+            case .dismiss:
+                if let textView = textView as? SlashAwareTextView, textView.isSlashTemplateExpanded {
+                    onCollapseSlashTemplates()
+                } else {
+                    onDismissSlashPalette()
+                }
+            case .submit:
+                onSubmitSlashSelection()
             }
         }
     }
@@ -859,8 +1249,23 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
 #elseif canImport(AppKit)
 private final class SlashAwareNSTextView: NSTextView {
     var slashPaletteEnabled = false
-    var activeSlashCommand: EditorSlashCommand?
+    var isSlashTemplateExpanded = false
     var onSlashAction: ((SlashCommandKeyboardAction) -> Void)?
+
+    override func keyDown(with event: NSEvent) {
+        guard slashPaletteEnabled else {
+            super.keyDown(with: event)
+            return
+        }
+
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if modifiers.contains(.command), (event.keyCode == 36 || event.keyCode == 76) {
+            onSlashAction?(.expand)
+            return
+        }
+
+        super.keyDown(with: event)
+    }
 
     override func doCommand(by selector: Selector) {
         guard slashPaletteEnabled else {
@@ -873,6 +1278,10 @@ private final class SlashAwareNSTextView: NSTextView {
             onSlashAction?(.moveSelection(-1))
         case #selector(moveDown(_:)):
             onSlashAction?(.moveSelection(1))
+        case #selector(moveRight(_:)):
+            onSlashAction?(.expand)
+        case #selector(moveLeft(_:)):
+            onSlashAction?(.collapse)
         case #selector(insertTab(_:)):
             onSlashAction?(.submit)
         case #selector(cancelOperation(_:)):
@@ -890,8 +1299,11 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
     let command: EditorCanvasCommand?
     let onCommandHandled: (UUID) -> Void
     @Binding var slashContext: SlashCommandContext?
-    let activeSlashCommand: EditorSlashCommand?
     let onMoveSlashSelection: (Int) -> Void
+    let onSubmitSlashSelection: () -> Void
+    let onExpandSlashTemplates: () -> Void
+    let onCollapseSlashTemplates: () -> Void
+    let isShowingSlashTemplates: Bool
     let onDismissSlashPalette: () -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -900,6 +1312,9 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
             isFocused: $isFocused,
             slashContext: $slashContext,
             onMoveSlashSelection: onMoveSlashSelection,
+            onSubmitSlashSelection: onSubmitSlashSelection,
+            onExpandSlashTemplates: onExpandSlashTemplates,
+            onCollapseSlashTemplates: onCollapseSlashTemplates,
             onDismissSlashPalette: onDismissSlashPalette
         )
     }
@@ -948,7 +1363,7 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
         context.coordinator.applyCommandIfNeeded(command, on: textView, onCommandHandled: onCommandHandled)
         if let textView = textView as? SlashAwareNSTextView {
             textView.slashPaletteEnabled = slashContext != nil
-            textView.activeSlashCommand = activeSlashCommand
+            textView.isSlashTemplateExpanded = isShowingSlashTemplates
             textView.onSlashAction = { [weak textView, weak coordinator = context.coordinator] action in
                 guard let textView, let coordinator else {
                     return
@@ -978,6 +1393,9 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
         @Binding private var isFocused: Bool
         @Binding private var slashContext: SlashCommandContext?
         private let onMoveSlashSelection: (Int) -> Void
+        private let onSubmitSlashSelection: () -> Void
+        private let onExpandSlashTemplates: () -> Void
+        private let onCollapseSlashTemplates: () -> Void
         private let onDismissSlashPalette: () -> Void
         private var isApplyingUpdate = false
         private var lastFocusedParagraphRange: NSRange?
@@ -988,12 +1406,18 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
             isFocused: Binding<Bool>,
             slashContext: Binding<SlashCommandContext?>,
             onMoveSlashSelection: @escaping (Int) -> Void,
+            onSubmitSlashSelection: @escaping () -> Void,
+            onExpandSlashTemplates: @escaping () -> Void,
+            onCollapseSlashTemplates: @escaping () -> Void,
             onDismissSlashPalette: @escaping () -> Void
         ) {
             _text = text
             _isFocused = isFocused
             _slashContext = slashContext
             self.onMoveSlashSelection = onMoveSlashSelection
+            self.onSubmitSlashSelection = onSubmitSlashSelection
+            self.onExpandSlashTemplates = onExpandSlashTemplates
+            self.onCollapseSlashTemplates = onCollapseSlashTemplates
             self.onDismissSlashPalette = onDismissSlashPalette
         }
 
@@ -1020,18 +1444,8 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
                 return true
             }
 
-            if replacementString == "\n",
-               let mutation = MarkdownEditorStyler.slashSubmitMutation(
-                for: (textView as? SlashAwareNSTextView)?.activeSlashCommand,
-                in: textView.string,
-                selectedRange: affectedCharRange
-               ) {
-                applyMutation(
-                    on: textView,
-                    replacementRange: mutation.replacementRange,
-                    replacementText: mutation.replacementText,
-                    selectedRange: mutation.selectedRange
-                )
+            if replacementString == "\n", slashContext != nil {
+                onSubmitSlashSelection()
                 return false
             }
 
@@ -1201,22 +1615,22 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
             switch action {
             case let .moveSelection(delta):
                 onMoveSlashSelection(delta)
-            case .dismiss:
-                onDismissSlashPalette()
-            case .submit:
-                guard let mutation = MarkdownEditorStyler.slashSubmitMutation(
-                    for: (textView as? SlashAwareNSTextView)?.activeSlashCommand,
-                    in: textView.string,
-                    selectedRange: textView.selectedRange()
-                ) else {
-                    return
+            case .expand:
+                if let textView = textView as? SlashAwareNSTextView, textView.isSlashTemplateExpanded {
+                    onSubmitSlashSelection()
+                } else {
+                    onExpandSlashTemplates()
                 }
-                applyMutation(
-                    on: textView,
-                    replacementRange: mutation.replacementRange,
-                    replacementText: mutation.replacementText,
-                    selectedRange: mutation.selectedRange
-                )
+            case .collapse:
+                onCollapseSlashTemplates()
+            case .dismiss:
+                if let textView = textView as? SlashAwareNSTextView, textView.isSlashTemplateExpanded {
+                    onCollapseSlashTemplates()
+                } else {
+                    onDismissSlashPalette()
+                }
+            case .submit:
+                onSubmitSlashSelection()
             }
         }
     }
@@ -1488,15 +1902,6 @@ private enum MarkdownEditorStyler {
         return nil
     }
 
-    static func slashSubmitMutation(for preferredCommand: EditorSlashCommand?, in text: String, selectedRange: NSRange) -> CommandMutation? {
-        guard let slashContext = slashContext(in: text, selectedRange: selectedRange),
-              let command = preferredCommand ?? EditorSlashCommand.matching(query: slashContext.query).first else {
-            return nil
-        }
-
-        return mutation(from: replacement(for: command, context: slashContext), textLength: text.utf16.count)
-    }
-
     static func slashContext(in text: String, selectedRange: NSRange) -> SlashCommandContext? {
         guard selectedRange.length == 0 else {
             return nil
@@ -1526,9 +1931,9 @@ private enum MarkdownEditorStyler {
         )
     }
 
-    static func replacement(for command: EditorSlashCommand, context: SlashCommandContext) -> EditorCanvasReplacement {
+    static func replacement(for content: String, context: SlashCommandContext) -> EditorCanvasReplacement {
         let indentation = String(repeating: " ", count: context.leadingWhitespace)
-        let indentedLines = command.snippet.content
+        let indentedLines = content
             .components(separatedBy: "\n")
             .map { indentation + $0 }
         let replacementText = indentedLines.joined(separator: "\n")
