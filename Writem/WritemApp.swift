@@ -113,22 +113,12 @@ private struct EditorViewCommands: Commands {
                 settings.showToolbar.toggle()
             }
 
+            Toggle("Auto Switch Dark Theme", isOn: autoThemeBinding)
+
             Menu("Theme") {
-                Toggle("Auto Switch Dark Theme", isOn: autoThemeBinding)
-
-                Divider()
-
-                Button {
-                    settings.preferredTheme = .light
-                } label: {
-                    themeMenuLabel(title: "Light", isSelected: !settings.autoThemeEnabled && settings.preferredTheme == .light)
-                }
-                .disabled(settings.autoThemeEnabled)
-
-                Button {
-                    settings.preferredTheme = .dark
-                } label: {
-                    themeMenuLabel(title: "Dark", isSelected: !settings.autoThemeEnabled && settings.preferredTheme == .dark)
+                Picker("Theme", selection: preferredThemeBinding) {
+                    Text("Light").tag(EditorTheme.light)
+                    Text("Dark").tag(EditorTheme.dark)
                 }
                 .disabled(settings.autoThemeEnabled)
             }
@@ -142,13 +132,11 @@ private struct EditorViewCommands: Commands {
         )
     }
 
-    @ViewBuilder
-    private func themeMenuLabel(title: String, isSelected: Bool) -> some View {
-        if isSelected {
-            Label(title, systemImage: "checkmark")
-        } else {
-            Text(title)
-        }
+    private var preferredThemeBinding: Binding<EditorTheme> {
+        Binding(
+            get: { settings.preferredTheme },
+            set: { settings.preferredTheme = $0 }
+        )
     }
 }
 
