@@ -1,5 +1,15 @@
 import SwiftUI
 
+#if canImport(AppKit)
+import AppKit
+private typealias PlatformFont = NSFont
+private typealias PlatformColor = NSColor
+#elseif canImport(UIKit)
+import UIKit
+private typealias PlatformFont = UIFont
+private typealias PlatformColor = UIColor
+#endif
+
 struct EditorCanvasView: View {
     @Binding var text: String
 
@@ -7,61 +17,910 @@ struct EditorCanvasView: View {
     let onDropImageFiles: ([URL]) -> Bool
 
     @State private var isImageDropTarget = false
-    @FocusState private var isEditorFocused: Bool
+    @State private var shouldFocusEditor = false
 
     var body: some View {
         centeredEditor
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .dropDestination(for: URL.self) { items, _ in
-            onDropImageFiles(items)
-        } isTargeted: { isTargeted in
-            isImageDropTarget = isTargeted
-        }
-        .onAppear {
-            DispatchQueue.main.async {
-                isEditorFocused = true
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .dropDestination(for: URL.self) { items, _ in
+                onDropImageFiles(items)
+            } isTargeted: { isTargeted in
+                isImageDropTarget = isTargeted
             }
-        }
-        .overlay(alignment: .topTrailing) {
-            if isImageDropTarget {
-                Label("Drop image to import into assets", systemImage: "photo.badge.plus")
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(
-                        Capsule()
-                            .fill(Color.accentColor.opacity(0.92))
-                    )
-                    .foregroundStyle(.white)
-                    .padding(.top, 18)
-                    .padding(.trailing, 24)
+            .onAppear {
+                DispatchQueue.main.async {
+                    shouldFocusEditor = true
+                }
             }
-        }
+            .overlay(alignment: .topTrailing) {
+                if isImageDropTarget {
+                    Label("Drop image to import", systemImage: "photo")
+                        .font(.caption.weight(.medium))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(Color.black.opacity(0.78))
+                        )
+                        .foregroundStyle(.white)
+                        .padding(.top, 18)
+                        .padding(.trailing, 24)
+                }
+            }
     }
 
     private var centeredEditor: some View {
         HStack(alignment: .top) {
             Spacer(minLength: 0)
-            TextEditor(text: $text)
-                .focused($isEditorFocused)
-                .scrollContentBackground(.hidden)
-                .font(.system(size: 17, weight: .regular, design: .default))
-                .foregroundStyle(Color(red: 0.14, green: 0.14, blue: 0.13))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color.white.opacity(0.8))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .stroke(Color.black.opacity(0.06), lineWidth: 1)
-                        )
-                )
+            MarkdownWritingTextView(text: $text, isFocused: $shouldFocusEditor)
                 .frame(maxWidth: lineWidth, maxHeight: .infinity)
-                .padding(.top, 28)
-                .padding(.bottom, 22)
+                .padding(.top, 24)
+                .padding(.bottom, 18)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 32)
     }
 }
+
+private struct MarkdownWritingTextView: View {
+    @Binding var text: String
+    @Binding var isFocused: Bool
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.white.opacity(0.72))
+
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.black.opacity(0.05), lineWidth: 1)
+
+            PlatformMarkdownTextView(text: $text, isFocused: $isFocused)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 10)
+        }
+    }
+}
+
+#if canImport(UIKit)
+private struct PlatformMarkdownTextView: UIViewRepresentable {
+    @Binding var text: String
+    @Binding var isFocused: Bool
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text, isFocused: $isFocused)
+    }
+
+    func makeUIView(context: Context) -> UITextView {
+        let textView = UITextView()
+        textView.delegate = context.coordinator
+        textView.backgroundColor = .clear
+        textView.autocorrectionType = .yes
+        textView.autocapitalizationType = .sentences
+        textView.spellCheckingType = .yes
+        textView.smartQuotesType = .yes
+        textView.smartDashesType = .yes
+        textView.adjustsFontForContentSizeCategory = true
+        textView.keyboardDismissMode = .interactive
+        textView.textContainerInset = .zero
+        textView.textContainer.lineFragmentPadding = 0
+        textView.typingAttributes = MarkdownEditorStyler.baseTypingAttributes
+        context.coordinator.applyStyledText(on: textView, value: text, force: true)
+        return textView
+    }
+
+    func updateUIView(_ textView: UITextView, context: Context) {
+        context.coordinator.applyStyledText(on: textView, value: text, force: textView.text != text)
+
+        if isFocused, !textView.isFirstResponder {
+            textView.becomeFirstResponder()
+        }
+    }
+
+    final class Coordinator: NSObject, UITextViewDelegate {
+        @Binding private var text: String
+        @Binding private var isFocused: Bool
+        private var isApplyingUpdate = false
+
+        init(text: Binding<String>, isFocused: Binding<Bool>) {
+            _text = text
+            _isFocused = isFocused
+        }
+
+        func applyStyledText(on textView: UITextView, value: String, force: Bool) {
+            guard force || textView.attributedText?.string != value else {
+                return
+            }
+
+            let selectedRange = textView.selectedRange
+            isApplyingUpdate = true
+            textView.attributedText = MarkdownEditorStyler.attributedText(for: value)
+            textView.typingAttributes = MarkdownEditorStyler.baseTypingAttributes
+            textView.selectedRange = NSRange(
+                location: min(selectedRange.location, textView.text.utf16.count),
+                length: min(selectedRange.length, max(textView.text.utf16.count - min(selectedRange.location, textView.text.utf16.count), 0))
+            )
+            isApplyingUpdate = false
+        }
+
+        func textViewDidChange(_ textView: UITextView) {
+            guard !isApplyingUpdate else {
+                return
+            }
+
+            text = textView.text
+            applyStyledText(on: textView, value: textView.text, force: true)
+        }
+
+        func textViewDidBeginEditing(_ textView: UITextView) {
+            isFocused = true
+        }
+
+        func textViewDidEndEditing(_ textView: UITextView) {
+            isFocused = false
+        }
+    }
+}
+#elseif canImport(AppKit)
+private struct PlatformMarkdownTextView: NSViewRepresentable {
+    @Binding var text: String
+    @Binding var isFocused: Bool
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text, isFocused: $isFocused)
+    }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.borderType = .noBorder
+        scrollView.drawsBackground = false
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
+
+        let textView = NSTextView()
+        textView.delegate = context.coordinator
+        textView.drawsBackground = false
+        textView.isRichText = true
+        textView.allowsUndo = true
+        textView.isAutomaticQuoteSubstitutionEnabled = true
+        textView.isAutomaticDashSubstitutionEnabled = true
+        textView.isAutomaticSpellingCorrectionEnabled = true
+        textView.textContainerInset = NSSize(width: 0, height: 0)
+        textView.textContainer?.lineFragmentPadding = 0
+        textView.isHorizontallyResizable = false
+        textView.isVerticallyResizable = true
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        textView.minSize = NSSize(width: 0, height: 0)
+        textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
+        textView.textContainer?.widthTracksTextView = true
+        textView.insertionPointColor = MarkdownEditorStyler.cursorColor
+
+        scrollView.documentView = textView
+        context.coordinator.applyStyledText(on: textView, value: text, force: true)
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let textView = scrollView.documentView as? NSTextView else {
+            return
+        }
+
+        context.coordinator.applyStyledText(on: textView, value: text, force: textView.string != text)
+
+        if isFocused, textView.window?.firstResponder !== textView {
+            textView.window?.makeFirstResponder(textView)
+        }
+    }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        @Binding private var text: String
+        @Binding private var isFocused: Bool
+        private var isApplyingUpdate = false
+
+        init(text: Binding<String>, isFocused: Binding<Bool>) {
+            _text = text
+            _isFocused = isFocused
+        }
+
+        func applyStyledText(on textView: NSTextView, value: String, force: Bool) {
+            guard force || textView.string != value else {
+                return
+            }
+
+            let selectedRanges = textView.selectedRanges
+            isApplyingUpdate = true
+            textView.textStorage?.setAttributedString(MarkdownEditorStyler.attributedText(for: value))
+            textView.setSelectedRanges(selectedRanges, affinity: .downstream, stillSelecting: false)
+            isApplyingUpdate = false
+        }
+
+        func textDidChange(_ notification: Notification) {
+            guard !isApplyingUpdate,
+                  let textView = notification.object as? NSTextView else {
+                return
+            }
+
+            text = textView.string
+            applyStyledText(on: textView, value: textView.string, force: true)
+        }
+
+        func textDidBeginEditing(_ notification: Notification) {
+            isFocused = true
+        }
+
+        func textDidEndEditing(_ notification: Notification) {
+            isFocused = false
+        }
+    }
+}
+#endif
+
+private enum MarkdownEditorStyler {
+    static var baseTypingAttributes: [NSAttributedString.Key: Any] {
+        [
+            .font: bodyFont,
+            .foregroundColor: textColor
+        ]
+    }
+
+    static var cursorColor: PlatformColor {
+        textColor
+    }
+
+    static func attributedText(for text: String) -> NSAttributedString {
+        let attributed = NSMutableAttributedString(string: text)
+        let fullRange = NSRange(location: 0, length: attributed.length)
+        attributed.addAttributes(
+            [
+                .font: bodyFont,
+                .foregroundColor: textColor,
+                .paragraphStyle: paragraphStyle(lineSpacing: 8, paragraphSpacing: 18)
+            ],
+            range: fullRange
+        )
+
+        let lines = text.components(separatedBy: "\n")
+        var location = 0
+        var inFrontmatter = false
+        var inCodeBlock = false
+
+        for (index, line) in lines.enumerated() {
+            let lineLength = (line as NSString).length
+            let lineRange = NSRange(location: location, length: lineLength)
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+            if index == 0, trimmed == "---" {
+                inFrontmatter = true
+                styleFrontmatterFence(in: attributed, lineRange: lineRange)
+                location += lineLength + 1
+                continue
+            }
+
+            if inFrontmatter {
+                styleFrontmatterLine(in: attributed, line: line, lineRange: lineRange)
+                if trimmed == "---" {
+                    styleFrontmatterFence(in: attributed, lineRange: lineRange)
+                    inFrontmatter = false
+                }
+                location += lineLength + 1
+                continue
+            }
+
+            if trimmed.hasPrefix("```") {
+                styleCodeFence(in: attributed, line: line, lineRange: lineRange)
+                inCodeBlock.toggle()
+                location += lineLength + 1
+                continue
+            }
+
+            if inCodeBlock {
+                styleCodeLine(in: attributed, lineRange: lineRange)
+                location += lineLength + 1
+                continue
+            }
+
+            if styleHeadingIfNeeded(in: attributed, line: line, lineRange: lineRange) {
+                applyInlineStyles(in: attributed, line: line, lineRange: lineRange)
+                location += lineLength + 1
+                continue
+            }
+
+            if styleQuoteIfNeeded(in: attributed, line: line, lineRange: lineRange) {
+                applyInlineStyles(in: attributed, line: line, lineRange: lineRange)
+                location += lineLength + 1
+                continue
+            }
+
+            if styleListIfNeeded(in: attributed, line: line, lineRange: lineRange) {
+                applyInlineStyles(in: attributed, line: line, lineRange: lineRange)
+                location += lineLength + 1
+                continue
+            }
+
+            if styleDividerIfNeeded(in: attributed, trimmedLine: trimmed, lineRange: lineRange) {
+                location += lineLength + 1
+                continue
+            }
+
+            if styleTableIfNeeded(in: attributed, line: line, lineRange: lineRange) {
+                location += lineLength + 1
+                continue
+            }
+
+            if styleImageIfNeeded(in: attributed, line: line, lineRange: lineRange) {
+                location += lineLength + 1
+                continue
+            }
+
+            attributed.addAttributes(
+                [
+                    .font: bodyFont,
+                    .foregroundColor: textColor,
+                    .paragraphStyle: paragraphStyle(lineSpacing: 8, paragraphSpacing: 18)
+                ],
+                range: lineRange
+            )
+            applyInlineStyles(in: attributed, line: line, lineRange: lineRange)
+            location += lineLength + 1
+        }
+
+        return attributed
+    }
+
+    private static func styleFrontmatterFence(in attributed: NSMutableAttributedString, lineRange: NSRange) {
+        attributed.addAttributes(
+            [
+                .font: monoFont(size: 13),
+                .foregroundColor: mutedColor
+            ],
+            range: lineRange
+        )
+    }
+
+    private static func styleFrontmatterLine(in attributed: NSMutableAttributedString, line: String, lineRange: NSRange) {
+        attributed.addAttributes(
+            [
+                .font: monoFont(size: 13),
+                .foregroundColor: textColor,
+                .backgroundColor: subtleBackground
+            ],
+            range: lineRange
+        )
+
+        guard let separator = line.firstIndex(of: ":") else {
+            return
+        }
+
+        let keyLength = line.distance(from: line.startIndex, to: separator)
+        attributed.addAttributes(
+            [
+                .foregroundColor: accentColor
+            ],
+            range: NSRange(location: lineRange.location, length: keyLength)
+        )
+    }
+
+    private static func styleCodeFence(in attributed: NSMutableAttributedString, line: String, lineRange: NSRange) {
+        attributed.addAttributes(
+            [
+                .font: monoFont(size: 13),
+                .foregroundColor: mutedColor,
+                .backgroundColor: codeBackground
+            ],
+            range: lineRange
+        )
+
+        if line.count > 3 {
+            attributed.addAttributes(
+                [
+                    .foregroundColor: accentColor
+                ],
+                range: NSRange(location: lineRange.location + 3, length: max(lineRange.length - 3, 0))
+            )
+        }
+    }
+
+    private static func styleCodeLine(in attributed: NSMutableAttributedString, lineRange: NSRange) {
+        attributed.addAttributes(
+            [
+                .font: monoFont(size: 14),
+                .foregroundColor: codeTextColor,
+                .backgroundColor: codeBackground,
+                .paragraphStyle: paragraphStyle(lineSpacing: 4, paragraphSpacing: 10)
+            ],
+            range: lineRange
+        )
+    }
+
+    private static func styleHeadingIfNeeded(in attributed: NSMutableAttributedString, line: String, lineRange: NSRange) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        let markerCount = trimmed.prefix { $0 == "#" }.count
+
+        guard (1...6).contains(markerCount),
+              trimmed.dropFirst(markerCount).first == " " else {
+            return false
+        }
+
+        let leadingWhitespace = leadingWhitespaceCount(in: line)
+        let markerRange = NSRange(location: lineRange.location + leadingWhitespace, length: markerCount)
+        let spacerRange = NSRange(location: markerRange.location + markerCount, length: 1)
+        let titleLength = max(lineRange.length - leadingWhitespace - markerCount - 1, 0)
+        let titleRange = NSRange(location: spacerRange.location + 1, length: titleLength)
+
+        attributed.addAttributes(
+            [
+                .font: headingFont(level: markerCount),
+                .foregroundColor: textColor,
+                .paragraphStyle: paragraphStyle(lineSpacing: 8, paragraphSpacing: 22 + CGFloat(max(0, 6 - markerCount)) * 2)
+            ],
+            range: lineRange
+        )
+        attributed.addAttributes(
+            [
+                .font: monoFont(size: headingMarkerSize(level: markerCount)),
+                .foregroundColor: syntaxColor
+            ],
+            range: markerRange
+        )
+        attributed.addAttributes(
+            [
+                .foregroundColor: syntaxColor
+            ],
+            range: spacerRange
+        )
+        attributed.addAttributes(
+            [
+                .font: headingFont(level: markerCount),
+                .foregroundColor: textColor
+            ],
+            range: titleRange
+        )
+        return true
+    }
+
+    private static func styleQuoteIfNeeded(in attributed: NSMutableAttributedString, line: String, lineRange: NSRange) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard trimmed.hasPrefix("> ") else {
+            return false
+        }
+
+        let leadingWhitespace = leadingWhitespaceCount(in: line)
+        let markerRange = NSRange(location: lineRange.location + leadingWhitespace, length: 1)
+
+        attributed.addAttributes(
+            [
+                .font: bodyFont,
+                .foregroundColor: quoteColor,
+                .paragraphStyle: paragraphStyle(lineSpacing: 8, paragraphSpacing: 16, firstLineHeadIndent: 18, headIndent: 18)
+            ],
+            range: lineRange
+        )
+        attributed.addAttributes(
+            [
+                .foregroundColor: syntaxColor
+            ],
+            range: markerRange
+        )
+        return true
+    }
+
+    private static func styleListIfNeeded(in attributed: NSMutableAttributedString, line: String, lineRange: NSRange) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        let leadingWhitespace = leadingWhitespaceCount(in: line)
+
+        if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") {
+            attributed.addAttributes(
+                [
+                    .font: bodyFont,
+                    .foregroundColor: textColor,
+                    .paragraphStyle: paragraphStyle(lineSpacing: 8, paragraphSpacing: 12, firstLineHeadIndent: 18, headIndent: 18)
+                ],
+                range: lineRange
+            )
+            attributed.addAttributes(
+                [
+                    .foregroundColor: accentColor
+                ],
+                range: NSRange(location: lineRange.location + leadingWhitespace, length: 1)
+            )
+            return true
+        }
+
+        guard let regex = try? NSRegularExpression(pattern: #"^\d+\.\s"#) else {
+            return false
+        }
+
+        let searchRange = NSRange(location: 0, length: (trimmed as NSString).length)
+        guard let match = regex.firstMatch(in: trimmed, range: searchRange) else {
+            return false
+        }
+
+        attributed.addAttributes(
+            [
+                .font: bodyFont,
+                .foregroundColor: textColor,
+                .paragraphStyle: paragraphStyle(lineSpacing: 8, paragraphSpacing: 12, firstLineHeadIndent: 24, headIndent: 24)
+            ],
+            range: lineRange
+        )
+        attributed.addAttributes(
+            [
+                .foregroundColor: accentColor
+            ],
+            range: NSRange(location: lineRange.location + leadingWhitespace, length: match.range.length)
+        )
+        return true
+    }
+
+    private static func styleDividerIfNeeded(in attributed: NSMutableAttributedString, trimmedLine: String, lineRange: NSRange) -> Bool {
+        guard trimmedLine == "---" || trimmedLine == "***" else {
+            return false
+        }
+
+        attributed.addAttributes(
+            [
+                .font: monoFont(size: 12),
+                .foregroundColor: syntaxColor
+            ],
+            range: lineRange
+        )
+        return true
+    }
+
+    private static func styleTableIfNeeded(in attributed: NSMutableAttributedString, line: String, lineRange: NSRange) -> Bool {
+        guard line.contains("|") else {
+            return false
+        }
+
+        attributed.addAttributes(
+            [
+                .font: monoFont(size: 14),
+                .foregroundColor: textColor,
+                .backgroundColor: tableBackground,
+                .paragraphStyle: paragraphStyle(lineSpacing: 6, paragraphSpacing: 10)
+            ],
+            range: lineRange
+        )
+
+        highlightMatches(of: #"\|"#, in: line, lineRange: lineRange, attributed: attributed, color: syntaxColor)
+        return true
+    }
+
+    private static func styleImageIfNeeded(in attributed: NSMutableAttributedString, line: String, lineRange: NSRange) -> Bool {
+        guard line.trimmingCharacters(in: .whitespaces).hasPrefix("![") else {
+            return false
+        }
+
+        attributed.addAttributes(
+            [
+                .font: bodyFont,
+                .foregroundColor: textColor
+            ],
+            range: lineRange
+        )
+
+        highlightMatches(of: #"!?\[|\]|\(|\)"#, in: line, lineRange: lineRange, attributed: attributed, color: syntaxColor)
+        return true
+    }
+
+    private static func applyInlineStyles(in attributed: NSMutableAttributedString, line: String, lineRange: NSRange) {
+        styleInlineCode(in: attributed, line: line, lineRange: lineRange)
+        styleInlineLinks(in: attributed, line: line, lineRange: lineRange)
+        styleInlineStrong(in: attributed, line: line, lineRange: lineRange, marker: "**")
+        styleInlineStrong(in: attributed, line: line, lineRange: lineRange, marker: "__")
+        styleInlineEmphasis(in: attributed, line: line, lineRange: lineRange, marker: "*")
+        styleInlineEmphasis(in: attributed, line: line, lineRange: lineRange, marker: "_")
+    }
+
+    private static func styleInlineCode(in attributed: NSMutableAttributedString, line: String, lineRange: NSRange) {
+        applyRegex(#"`([^`]+)`"#, to: line, lineRange: lineRange) { ranges in
+            guard ranges.count == 2 else {
+                return
+            }
+            let full = ranges[0]
+            let inner = ranges[1]
+            let left = NSRange(location: full.location, length: 1)
+            let right = NSRange(location: full.location + full.length - 1, length: 1)
+            let innerRange = inner
+
+            attributed.addAttributes(
+                [
+                    .foregroundColor: syntaxColor
+                ],
+                range: left
+            )
+            attributed.addAttributes(
+                [
+                    .foregroundColor: syntaxColor
+                ],
+                range: right
+            )
+            attributed.addAttributes(
+                [
+                    .font: monoFont(size: inlineFontSize(attributed, range: innerRange)),
+                    .foregroundColor: codeInlineColor,
+                    .backgroundColor: subtleBackground
+                ],
+                range: innerRange
+            )
+        }
+    }
+
+    private static func styleInlineLinks(in attributed: NSMutableAttributedString, line: String, lineRange: NSRange) {
+        applyRegex(#"\[([^\]]+)\]\(([^)]+)\)"#, to: line, lineRange: lineRange) { ranges in
+            guard ranges.count == 3 else {
+                return
+            }
+            let full = ranges[0]
+            let label = ranges[1]
+            let url = ranges[2]
+
+            attributed.addAttributes(
+                [
+                    .foregroundColor: linkColor
+                ],
+                range: label
+            )
+            attributed.addAttributes(
+                [
+                    .foregroundColor: mutedColor
+                ],
+                range: url
+            )
+
+            let fullRange = NSRange(location: full.location, length: full.length)
+            highlightBracketCharacters(in: attributed, range: fullRange)
+        }
+    }
+
+    private static func styleInlineStrong(in attributed: NSMutableAttributedString, line: String, lineRange: NSRange, marker: String) {
+        let escapedMarker = NSRegularExpression.escapedPattern(for: marker)
+        let pattern = escapedMarker + "([^" + String(marker.prefix(1)) + "]+)" + escapedMarker
+
+        applyRegex(pattern, to: line, lineRange: lineRange) { ranges in
+            guard ranges.count == 2 else {
+                return
+            }
+
+            let inner = ranges[1]
+            let full = ranges[0]
+            let leading = NSRange(location: full.location, length: marker.count)
+            let trailing = NSRange(location: full.location + full.length - marker.count, length: marker.count)
+
+            attributed.addAttributes([.foregroundColor: syntaxColor], range: leading)
+            attributed.addAttributes([.foregroundColor: syntaxColor], range: trailing)
+            attributed.addAttributes(
+                [
+                    .font: boldFont(size: inlineFontSize(attributed, range: inner))
+                ],
+                range: inner
+            )
+        }
+    }
+
+    private static func styleInlineEmphasis(in attributed: NSMutableAttributedString, line: String, lineRange: NSRange, marker: String) {
+        let escapedMarker = NSRegularExpression.escapedPattern(for: marker)
+        let pattern = "(?<!\(escapedMarker))" + escapedMarker + "([^" + marker + "]+)" + escapedMarker + "(?!\(escapedMarker))"
+
+        applyRegex(pattern, to: line, lineRange: lineRange) { ranges in
+            guard ranges.count == 2 else {
+                return
+            }
+
+            let inner = ranges[1]
+            let full = ranges[0]
+            let leading = NSRange(location: full.location, length: 1)
+            let trailing = NSRange(location: full.location + full.length - 1, length: 1)
+
+            attributed.addAttributes([.foregroundColor: syntaxColor], range: leading)
+            attributed.addAttributes([.foregroundColor: syntaxColor], range: trailing)
+            attributed.addAttributes(
+                [
+                    .font: italicFont(size: inlineFontSize(attributed, range: inner))
+                ],
+                range: inner
+            )
+        }
+    }
+
+    private static func applyRegex(
+        _ pattern: String,
+        to line: String,
+        lineRange: NSRange,
+        apply: ([NSRange]) -> Void
+    ) {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+            return
+        }
+
+        let nsLine = line as NSString
+        let matches = regex.matches(in: line, range: NSRange(location: 0, length: nsLine.length))
+        for match in matches.reversed() {
+            let ranges = (0..<match.numberOfRanges).map { index -> NSRange in
+                let range = match.range(at: index)
+                guard range.location != NSNotFound else {
+                    return range
+                }
+                return NSRange(location: lineRange.location + range.location, length: range.length)
+            }
+            apply(ranges)
+        }
+    }
+
+    private static func highlightMatches(
+        of pattern: String,
+        in line: String,
+        lineRange: NSRange,
+        attributed: NSMutableAttributedString,
+        color: PlatformColor
+    ) {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+            return
+        }
+
+        let nsLine = line as NSString
+        let matches = regex.matches(in: line, range: NSRange(location: 0, length: nsLine.length))
+        for match in matches {
+            let range = NSRange(location: lineRange.location + match.range.location, length: match.range.length)
+            attributed.addAttributes([.foregroundColor: color], range: range)
+        }
+    }
+
+    private static func highlightBracketCharacters(in attributed: NSMutableAttributedString, range: NSRange) {
+        let snippet = (attributed.string as NSString).substring(with: range)
+        for (index, character) in snippet.enumerated() where "[]()".contains(character) {
+            attributed.addAttributes(
+                [.foregroundColor: syntaxColor],
+                range: NSRange(location: range.location + index, length: 1)
+            )
+        }
+    }
+
+    private static func inlineFontSize(_ attributed: NSMutableAttributedString, range: NSRange) -> CGFloat {
+        guard range.location != NSNotFound,
+              range.location < attributed.length,
+              let font = attributed.attribute(.font, at: range.location, effectiveRange: nil) as? PlatformFont else {
+            return bodyFont.pointSize
+        }
+        return font.pointSize
+    }
+
+    private static var bodyFont: PlatformFont {
+        systemFont(size: 17, weight: .regular)
+    }
+
+    private static func headingFont(level: Int) -> PlatformFont {
+        switch level {
+        case 1:
+            return systemFont(size: 30, weight: .bold)
+        case 2:
+            return systemFont(size: 25, weight: .semibold)
+        case 3:
+            return systemFont(size: 22, weight: .semibold)
+        case 4:
+            return systemFont(size: 20, weight: .medium)
+        case 5:
+            return systemFont(size: 18, weight: .medium)
+        default:
+            return systemFont(size: 17, weight: .medium)
+        }
+    }
+
+    private static func headingMarkerSize(level: Int) -> CGFloat {
+        switch level {
+        case 1:
+            return 14
+        case 2:
+            return 13
+        default:
+            return 12
+        }
+    }
+
+    private static func paragraphStyle(
+        lineSpacing: CGFloat,
+        paragraphSpacing: CGFloat,
+        firstLineHeadIndent: CGFloat = 0,
+        headIndent: CGFloat = 0
+    ) -> NSParagraphStyle {
+        let style = NSMutableParagraphStyle()
+        style.lineSpacing = lineSpacing
+        style.paragraphSpacing = paragraphSpacing
+        style.firstLineHeadIndent = firstLineHeadIndent
+        style.headIndent = headIndent
+        return style
+    }
+
+    private static var textColor: PlatformColor {
+        platformColor(red: 0.15, green: 0.15, blue: 0.14, alpha: 1)
+    }
+
+    private static var mutedColor: PlatformColor {
+        platformColor(red: 0.48, green: 0.48, blue: 0.46, alpha: 1)
+    }
+
+    private static var syntaxColor: PlatformColor {
+        platformColor(red: 0.67, green: 0.67, blue: 0.64, alpha: 1)
+    }
+
+    private static var accentColor: PlatformColor {
+        platformColor(red: 0.74, green: 0.42, blue: 0.30, alpha: 1)
+    }
+
+    private static var quoteColor: PlatformColor {
+        platformColor(red: 0.39, green: 0.42, blue: 0.44, alpha: 1)
+    }
+
+    private static var subtleBackground: PlatformColor {
+        platformColor(red: 0.95, green: 0.95, blue: 0.93, alpha: 1)
+    }
+
+    private static var tableBackground: PlatformColor {
+        platformColor(red: 0.98, green: 0.97, blue: 0.95, alpha: 1)
+    }
+
+    private static var codeBackground: PlatformColor {
+        platformColor(red: 0.15, green: 0.16, blue: 0.18, alpha: 1)
+    }
+
+    private static var codeTextColor: PlatformColor {
+        platformColor(red: 0.92, green: 0.92, blue: 0.90, alpha: 1)
+    }
+
+    private static var codeInlineColor: PlatformColor {
+        platformColor(red: 0.44, green: 0.23, blue: 0.20, alpha: 1)
+    }
+
+    private static var linkColor: PlatformColor {
+        platformColor(red: 0.18, green: 0.36, blue: 0.62, alpha: 1)
+    }
+
+    private static func monoFont(size: CGFloat) -> PlatformFont {
+        #if canImport(AppKit)
+        return .monospacedSystemFont(ofSize: size, weight: .regular)
+        #else
+        return .monospacedSystemFont(ofSize: size, weight: .regular)
+        #endif
+    }
+
+    private static func boldFont(size: CGFloat) -> PlatformFont {
+        systemFont(size: size, weight: .semibold)
+    }
+
+    private static func italicFont(size: CGFloat) -> PlatformFont {
+        #if canImport(AppKit)
+        let font = NSFont.systemFont(ofSize: size)
+        return NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask)
+        #else
+        let descriptor = UIFont.systemFont(ofSize: size).fontDescriptor.withSymbolicTraits(.traitItalic)
+        return descriptor.map { UIFont(descriptor: $0, size: size) } ?? UIFont.italicSystemFont(ofSize: size)
+        #endif
+    }
+
+    private static func systemFont(size: CGFloat, weight: PlatformWeight) -> PlatformFont {
+        #if canImport(AppKit)
+        return .systemFont(ofSize: size, weight: weight)
+        #else
+        return .systemFont(ofSize: size, weight: weight)
+        #endif
+    }
+
+    private static func platformColor(red: CGFloat, green: CGFloat, blue: CGFloat, alpha: CGFloat) -> PlatformColor {
+        #if canImport(AppKit)
+        return .init(calibratedRed: red, green: green, blue: blue, alpha: alpha)
+        #else
+        return .init(red: red, green: green, blue: blue, alpha: alpha)
+        #endif
+    }
+
+    private static func leadingWhitespaceCount(in line: String) -> Int {
+        let prefix = line.prefix { $0 == " " || $0 == "\t" }
+        return prefix.count
+    }
+}
+
+#if canImport(AppKit)
+private typealias PlatformWeight = NSFont.Weight
+#elseif canImport(UIKit)
+private typealias PlatformWeight = UIFont.Weight
+#endif
