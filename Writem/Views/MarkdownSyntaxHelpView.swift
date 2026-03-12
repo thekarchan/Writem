@@ -58,6 +58,20 @@ struct MarkdownSyntaxHelpView: View {
             items: [
                 .init(label: "Metadata", syntax: "---\ntitle: Writem\ndate: 2026-03-12\nslug: writem\n---")
             ]
+        ),
+        .init(
+            title: "Shortcuts",
+            items: [
+                .init(label: "New Draft", syntax: "Cmd + N"),
+                .init(label: "Open", syntax: "Cmd + O"),
+                .init(label: "Save", syntax: "Cmd + S"),
+                .init(label: "Save As", syntax: "Shift + Cmd + S"),
+                .init(label: "Bold", syntax: "Cmd + B"),
+                .init(label: "Italic", syntax: "Cmd + I"),
+                .init(label: "Inline Code", syntax: "Cmd + E"),
+                .init(label: "Link", syntax: "Cmd + K"),
+                .init(label: "Markdown Help", syntax: "Shift + Cmd + /")
+            ]
         )
     ]
 
@@ -67,7 +81,7 @@ struct MarkdownSyntaxHelpView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Markdown Syntax")
                         .font(.system(size: 24, weight: .semibold, design: .serif))
-                    Text("Quick reference for the syntax Writem supports in everyday writing.")
+                    Text("Quick reference for the markdown syntax and shortcuts Writem supports in everyday writing.")
                         .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                 }
