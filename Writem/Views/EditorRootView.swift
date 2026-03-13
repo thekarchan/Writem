@@ -116,6 +116,15 @@ struct EditorRootView: View {
                     .transition(outlineDrawerTransition)
                     .zIndex(2)
             }
+
+            if session.autosaveState == .failed {
+                autosaveFailureBanner
+                    .padding(.trailing, 14)
+                    .padding(.bottom, settings.showToolbar ? 42 : 14)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(3)
+            }
         }
         .navigationTitle(currentDocumentTitle)
         .onAppear {
@@ -232,6 +241,7 @@ struct EditorRootView: View {
         }
         .preferredColorScheme(settings.resolvedColorScheme)
         .animation(.spring(response: 0.3, dampingFraction: 0.92), value: isShowingOutline)
+        .animation(.spring(response: 0.26, dampingFraction: 0.9), value: session.autosaveState == .failed)
     }
 
     #if os(iOS)
@@ -455,6 +465,41 @@ struct EditorRootView: View {
                         .frame(height: 1)
                 }
         )
+    }
+
+    private var autosaveFailureBanner: some View {
+        HStack(spacing: 10) {
+            Label("Autosave failed", systemImage: "exclamationmark.triangle.fill")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.92) : Color.black.opacity(0.78))
+
+            Button("Retry") {
+                session.requestSave(forceSaveAs: false)
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(colorScheme == .dark ? Color.orange.opacity(0.95) : Color.orange.opacity(0.88))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .fill(
+                    colorScheme == .dark
+                        ? Color(red: 0.18, green: 0.14, blue: 0.12).opacity(0.92)
+                        : Color(red: 0.99, green: 0.95, blue: 0.91).opacity(0.96)
+                )
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .stroke(
+                    colorScheme == .dark
+                        ? Color.orange.opacity(0.18)
+                        : Color.orange.opacity(0.22),
+                    lineWidth: 0.8
+                )
+        }
+        .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.18 : 0.08), radius: 18, y: 8)
     }
 
     @ViewBuilder

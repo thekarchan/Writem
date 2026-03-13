@@ -5,6 +5,7 @@ Dates use the local repository commit date.
 
 ## 2026-03-12
 
+- Show a lightweight retry banner when autosave fails
 - Make autosave status appear only when saving or on failure
 - Add explicit autosave status and undo/redo support
 - Add a Settings menu with an iCloud sync toggle
