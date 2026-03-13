@@ -60,6 +60,13 @@ struct RecentDocumentItem: Identifiable, Equatable, Codable {
     }
 }
 
+enum EditorAutosaveState: Equatable {
+    case idle
+    case saving
+    case saved(Date)
+    case failed
+}
+
 enum EditorSessionError: LocalizedError {
     case invalidTextEncoding
     case missingSaveLocation
@@ -82,6 +89,7 @@ final class EditorSessionStore: ObservableObject {
     @Published var text: String
     @Published var fileURL: URL?
     @Published private(set) var isDirty: Bool
+    @Published private(set) var autosaveState: EditorAutosaveState
     @Published private(set) var transitionRequest: EditorTransitionRequest?
     @Published private(set) var saveRequest: EditorSaveRequest?
     @Published private(set) var recentDocuments: [RecentDocumentItem]
@@ -103,6 +111,7 @@ final class EditorSessionStore: ObservableObject {
         self.fileURL = nil
         self.lastSavedText = ""
         self.isDirty = !scratchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        self.autosaveState = scratchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .idle : .saved(Date())
         self.recentDocuments = Self.loadRecentDocuments(from: defaults)
 
         bindChanges()
@@ -116,6 +125,19 @@ final class EditorSessionStore: ObservableObject {
 
         let limited = String(rawTitle.prefix(16)).trimmingCharacters(in: .whitespacesAndNewlines)
         return limited.isEmpty ? "Untitled" : limited
+    }
+
+    var autosaveStatusText: String {
+        switch autosaveState {
+        case .idle:
+            return fileURL == nil ? "Draft ready" : "Saved"
+        case .saving:
+            return fileURL == nil ? "Saving draft..." : "Saving..."
+        case .saved:
+            return fileURL == nil ? "Draft saved locally" : "Autosaved"
+        case .failed:
+            return fileURL == nil ? "Draft save failed" : "Autosave failed"
+        }
     }
 
     func requestNewDraft() {
@@ -148,6 +170,7 @@ final class EditorSessionStore: ObservableObject {
             fileURL = nil
             lastSavedText = ""
             isDirty = false
+            autosaveState = .idle
             defaults.set(SampleDocument.content, forKey: Key.scratchText)
         }
     }
@@ -163,6 +186,7 @@ final class EditorSessionStore: ObservableObject {
             fileURL = url
             lastSavedText = loadedText
             isDirty = false
+            autosaveState = .saved(Date())
         }
 
         rememberRecentDocument(url)
@@ -176,6 +200,7 @@ final class EditorSessionStore: ObservableObject {
         try write(text, to: fileURL)
         lastSavedText = text
         isDirty = false
+        autosaveState = .saved(Date())
         rememberRecentDocument(fileURL)
     }
 
@@ -184,6 +209,7 @@ final class EditorSessionStore: ObservableObject {
             fileURL = url
             lastSavedText = text
             isDirty = false
+            autosaveState = .saved(Date())
             defaults.set("", forKey: Key.scratchText)
         }
 
@@ -235,8 +261,10 @@ final class EditorSessionStore: ObservableObject {
                 if self.fileURL == nil {
                     self.defaults.set(updatedText, forKey: Key.scratchText)
                     self.isDirty = !updatedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    self.autosaveState = updatedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .idle : .saved(Date())
                 } else {
                     self.isDirty = updatedText != self.lastSavedText
+                    self.autosaveState = updatedText != self.lastSavedText ? .saving : .saved(Date())
                 }
             }
             .store(in: &cancellables)
@@ -255,9 +283,11 @@ final class EditorSessionStore: ObservableObject {
                     try self.write(updatedText, to: fileURL)
                     self.lastSavedText = updatedText
                     self.isDirty = false
+                    self.autosaveState = .saved(Date())
                 } catch {
                     // Leave the session dirty so the user can retry an explicit save.
                     self.isDirty = true
+                    self.autosaveState = .failed
                 }
             }
             .store(in: &cancellables)

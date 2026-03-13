@@ -41,6 +41,7 @@ struct EditorRootView: View {
     @EnvironmentObject private var session: EditorSessionStore
     @EnvironmentObject private var settings: EditorSettingsStore
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.undoManager) private var undoManager
 
     private var outline: [OutlineItem] {
         MarkdownAnalyzer.outline(for: session.text)
@@ -236,6 +237,18 @@ struct EditorRootView: View {
     #if os(iOS)
     private var compactControlMenu: some View {
         Menu {
+            Button("Undo") {
+                undoManager?.undo()
+            }
+            .disabled(!(undoManager?.canUndo ?? false))
+
+            Button("Redo") {
+                undoManager?.redo()
+            }
+            .disabled(!(undoManager?.canRedo ?? false))
+
+            Divider()
+
             Button("New Draft") {
                 session.requestNewDraft()
             }
@@ -418,6 +431,7 @@ struct EditorRootView: View {
             Text("\(wordCount) words")
             Text("\(outline.count) headings")
             Text("\(issues.count) checks")
+            Text(session.autosaveStatusText)
             if let lastImportedAsset {
                 Text(lastImportedAsset.relativePath)
                     .lineLimit(1)

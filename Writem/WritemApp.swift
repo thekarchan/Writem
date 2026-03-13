@@ -144,8 +144,23 @@ private struct EditorViewCommands: Commands {
 
 private struct EditorEditCommands: Commands {
     @ObservedObject var settings: EditorSettingsStore
+    @Environment(\.undoManager) private var undoManager
 
     var body: some Commands {
+        CommandGroup(replacing: .undoRedo) {
+            Button("Undo") {
+                undoManager?.undo()
+            }
+            .keyboardShortcut("z", modifiers: .command)
+            .disabled(!(undoManager?.canUndo ?? false))
+
+            Button("Redo") {
+                undoManager?.redo()
+            }
+            .keyboardShortcut("Z", modifiers: [.command, .shift])
+            .disabled(!(undoManager?.canRedo ?? false))
+        }
+
         CommandGroup(after: .textEditing) {
             Divider()
 

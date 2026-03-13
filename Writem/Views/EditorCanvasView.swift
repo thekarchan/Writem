@@ -1886,6 +1886,8 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
         }
 
         private func applyMutation(on textView: UITextView, replacementRange: NSRange, replacementText: String, selectedRange: NSRange) {
+            let previousText = textView.text ?? ""
+            let previousSelectedRange = textView.selectedRange
             let updatedText = (textView.text as NSString).replacingCharacters(
                 in: replacementRange,
                 with: replacementText
@@ -1894,8 +1896,37 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
                 location: min(selectedRange.location, updatedText.utf16.count),
                 length: min(selectedRange.length, max(updatedText.utf16.count - min(selectedRange.location, updatedText.utf16.count), 0))
             )
+            registerUndo(on: textView, restoringText: previousText, selectedRange: previousSelectedRange)
             text = updatedText
             applyStyledText(on: textView, value: updatedText, selectedRange: targetRange, force: true)
+        }
+
+        private func registerUndo(on textView: UITextView, restoringText previousText: String, selectedRange previousSelectedRange: NSRange) {
+            textView.undoManager?.registerUndo(withTarget: self) { coordinator in
+                coordinator.restoreUndoState(
+                    on: textView,
+                    text: previousText,
+                    selectedRange: previousSelectedRange
+                )
+            }
+            textView.undoManager?.setActionName("Edit")
+        }
+
+        private func restoreUndoState(on textView: UITextView, text restoredText: String, selectedRange restoredSelectedRange: NSRange) {
+            let currentText = textView.text ?? ""
+            let currentSelectedRange = textView.selectedRange
+
+            textView.undoManager?.registerUndo(withTarget: self) { coordinator in
+                coordinator.restoreUndoState(
+                    on: textView,
+                    text: currentText,
+                    selectedRange: currentSelectedRange
+                )
+            }
+            textView.undoManager?.setActionName("Edit")
+
+            text = restoredText
+            applyStyledText(on: textView, value: restoredText, selectedRange: restoredSelectedRange, force: true)
         }
 
         private func scheduleStyledText(on textView: UITextView, value: String, selectedRange: NSRange) {
@@ -2316,13 +2347,44 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
         }
 
         private func applyMutation(on textView: NSTextView, replacementRange: NSRange, replacementText: String, selectedRange: NSRange) {
+            let previousText = textView.string
+            let previousSelectedRange = textView.selectedRange()
             let updatedText = (textView.string as NSString).replacingCharacters(
                 in: replacementRange,
                 with: replacementText
             )
             let targetRange = MarkdownEditorStyler.clamped(selectedRange, maxLength: updatedText.utf16.count)
+            registerUndo(on: textView, restoringText: previousText, selectedRange: previousSelectedRange)
             text = updatedText
             applyStyledText(on: textView, value: updatedText, selectedRange: targetRange, force: true)
+        }
+
+        private func registerUndo(on textView: NSTextView, restoringText previousText: String, selectedRange previousSelectedRange: NSRange) {
+            textView.undoManager?.registerUndo(withTarget: self) { coordinator in
+                coordinator.restoreUndoState(
+                    on: textView,
+                    text: previousText,
+                    selectedRange: previousSelectedRange
+                )
+            }
+            textView.undoManager?.setActionName("Edit")
+        }
+
+        private func restoreUndoState(on textView: NSTextView, text restoredText: String, selectedRange restoredSelectedRange: NSRange) {
+            let currentText = textView.string
+            let currentSelectedRange = textView.selectedRange()
+
+            textView.undoManager?.registerUndo(withTarget: self) { coordinator in
+                coordinator.restoreUndoState(
+                    on: textView,
+                    text: currentText,
+                    selectedRange: currentSelectedRange
+                )
+            }
+            textView.undoManager?.setActionName("Edit")
+
+            text = restoredText
+            applyStyledText(on: textView, value: restoredText, selectedRange: restoredSelectedRange, force: true)
         }
 
         private func scheduleStyledText(on textView: NSTextView, value: String, selectedRange: NSRange) {
