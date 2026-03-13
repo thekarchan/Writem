@@ -19,7 +19,7 @@ struct WritemApp: App {
         .commands {
             #if os(macOS)
             EditorFileCommands(session: session)
-            EditorEditCommands(settings: settings)
+            EditorEditCommands(session: session, settings: settings)
             EditorViewCommands(settings: settings)
             EditorSettingsCommands(settings: settings)
             EditorHelpCommands()
@@ -143,6 +143,7 @@ private struct EditorViewCommands: Commands {
 }
 
 private struct EditorEditCommands: Commands {
+    @ObservedObject var session: EditorSessionStore
     @ObservedObject var settings: EditorSettingsStore
     @Environment(\.undoManager) private var undoManager
 
@@ -163,6 +164,30 @@ private struct EditorEditCommands: Commands {
 
         CommandGroup(after: .textEditing) {
             Divider()
+
+            Menu("Find") {
+                Button("Find...") {
+                    session.requestFind()
+                }
+                .keyboardShortcut("f", modifiers: .command)
+
+                Button("Replace...") {
+                    session.requestReplace()
+                }
+                .keyboardShortcut("f", modifiers: [.command, .option])
+
+                Divider()
+
+                Button("Find Next") {
+                    session.requestFindNext()
+                }
+                .keyboardShortcut("g", modifiers: .command)
+
+                Button("Find Previous") {
+                    session.requestFindPrevious()
+                }
+                .keyboardShortcut("G", modifiers: [.command, .shift])
+            }
 
             Menu("Font") {
                 ForEach(EditorFontStyle.allCases) { fontStyle in

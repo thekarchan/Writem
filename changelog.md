@@ -5,6 +5,8 @@ Dates use the local repository commit date.
 
 ## 2026-03-12
 
+- Add a repository status document that tracks implemented features and common gaps
+- Add a floating find and replace panel with next, previous, replace, and replace all actions
 - Show a lightweight retry banner when autosave fails
 - Make autosave status appear only when saving or on failure
 - Add explicit autosave status and undo/redo support

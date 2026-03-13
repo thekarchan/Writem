@@ -35,6 +35,7 @@
 		BB000000000000000000001A /* SettingsPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000126 /* SettingsPanelView.swift */; };
 		BB000000000000000000001B /* TableEditorPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000127 /* TableEditorPanelView.swift */; };
 		BB000000000000000000001C /* MarkdownSyntaxHelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000129 /* MarkdownSyntaxHelpView.swift */; };
+		BB000000000000000000001D /* TextSearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000000000000000000012A /* TextSearchService.swift */; };
 		BC0000000000000000000001 /* WritemApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000101 /* WritemApp.swift */; };
 		BC0000000000000000000002 /* MarkdownFileDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000102 /* MarkdownFileDocument.swift */; };
 		BC0000000000000000000003 /* EditorMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000103 /* EditorMode.swift */; };
@@ -63,6 +64,7 @@
 		BC000000000000000000001A /* SettingsPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000126 /* SettingsPanelView.swift */; };
 		BC000000000000000000001B /* TableEditorPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000127 /* TableEditorPanelView.swift */; };
 		BC000000000000000000001C /* MarkdownSyntaxHelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000129 /* MarkdownSyntaxHelpView.swift */; };
+		BC000000000000000000001D /* TextSearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000000000000000000012A /* TextSearchService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -96,6 +98,7 @@
 		BB0000000000000000000127 /* TableEditorPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TableEditorPanelView.swift; sourceTree = "<group>"; };
 		BB0000000000000000000128 /* Writem.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Writem.entitlements; sourceTree = "<group>"; };
 		BB0000000000000000000129 /* MarkdownSyntaxHelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownSyntaxHelpView.swift; sourceTree = "<group>"; };
+		BB000000000000000000012A /* TextSearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextSearchService.swift; sourceTree = "<group>"; };
 		BC00000000000000000000F1 /* WritemMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WritemMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -174,6 +177,7 @@
 				BB0000000000000000000123 /* MarkdownRenderService.swift */,
 				BB0000000000000000000124 /* CodeHighlightingService.swift */,
 				BB0000000000000000000125 /* DocumentExportService.swift */,
+				BB000000000000000000012A /* TextSearchService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -318,6 +322,7 @@
 				BB000000000000000000001A /* SettingsPanelView.swift in Sources */,
 				BB000000000000000000001B /* TableEditorPanelView.swift in Sources */,
 				BB000000000000000000001C /* MarkdownSyntaxHelpView.swift in Sources */,
+				BB000000000000000000001D /* TextSearchService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -352,6 +357,7 @@
 				BC000000000000000000001A /* SettingsPanelView.swift in Sources */,
 				BC000000000000000000001B /* TableEditorPanelView.swift in Sources */,
 				BC000000000000000000001C /* MarkdownSyntaxHelpView.swift in Sources */,
+				BC000000000000000000001D /* TextSearchService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

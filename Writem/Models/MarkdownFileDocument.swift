@@ -44,6 +44,18 @@ struct EditorTransitionRequest: Identifiable, Equatable {
     let action: EditorTransitionAction
 }
 
+enum EditorFindAction: Equatable {
+    case openFind
+    case openReplace
+    case findNext
+    case findPrevious
+}
+
+struct EditorFindRequest: Identifiable, Equatable {
+    let id = UUID()
+    let action: EditorFindAction
+}
+
 struct RecentDocumentItem: Identifiable, Equatable, Codable {
     let id: String
     let displayName: String
@@ -92,6 +104,7 @@ final class EditorSessionStore: ObservableObject {
     @Published private(set) var autosaveState: EditorAutosaveState
     @Published private(set) var transitionRequest: EditorTransitionRequest?
     @Published private(set) var saveRequest: EditorSaveRequest?
+    @Published private(set) var findRequest: EditorFindRequest?
     @Published private(set) var recentDocuments: [RecentDocumentItem]
 
     private let defaults: UserDefaults
@@ -162,6 +175,26 @@ final class EditorSessionStore: ObservableObject {
 
     func consumeSaveRequest() {
         saveRequest = nil
+    }
+
+    func requestFind() {
+        findRequest = .init(action: .openFind)
+    }
+
+    func requestReplace() {
+        findRequest = .init(action: .openReplace)
+    }
+
+    func requestFindNext() {
+        findRequest = .init(action: .findNext)
+    }
+
+    func requestFindPrevious() {
+        findRequest = .init(action: .findPrevious)
+    }
+
+    func consumeFindRequest() {
+        findRequest = nil
     }
 
     func startNewDraft() {

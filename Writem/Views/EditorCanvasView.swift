@@ -743,11 +743,19 @@ struct EditorCanvasCommand: Identifiable, Equatable {
         case italic
         case inlineCode
         case link
+        case find(EditorFindCanvasAction)
         case replace(EditorCanvasReplacement)
     }
 
     let id = UUID()
     let action: Action
+}
+
+enum EditorFindCanvasAction: Equatable {
+    case selectNext(query: String)
+    case selectPrevious(query: String)
+    case replaceCurrent(query: String, replacement: String)
+    case replaceAll(query: String, replacement: String)
 }
 
 struct EditorCanvasView: View {
@@ -1871,18 +1879,105 @@ private struct PlatformMarkdownTextView: UIViewRepresentable {
 
             lastHandledCommandID = command.id
 
-            if let mutation = MarkdownEditorStyler.commandMutation(for: command.action, in: textView.text, selectedRange: textView.selectedRange) {
-                applyMutation(
-                    on: textView,
-                    replacementRange: mutation.replacementRange,
-                    replacementText: mutation.replacementText,
-                    selectedRange: mutation.selectedRange
-                )
+            switch command.action {
+            case let .find(findAction):
+                applyFindAction(findAction, on: textView)
+            default:
+                if let mutation = MarkdownEditorStyler.commandMutation(for: command.action, in: textView.text, selectedRange: textView.selectedRange) {
+                    applyMutation(
+                        on: textView,
+                        replacementRange: mutation.replacementRange,
+                        replacementText: mutation.replacementText,
+                        selectedRange: mutation.selectedRange
+                    )
+                }
             }
 
             DispatchQueue.main.async {
                 onCommandHandled(command.id)
             }
+        }
+
+        private func applyFindAction(_ action: EditorFindCanvasAction, on textView: UITextView) {
+            let currentText = textView.text ?? ""
+
+            switch action {
+            case let .selectNext(query):
+                let match = TextSearchService.nextMatchRange(
+                    for: query,
+                    in: currentText,
+                    from: textView.selectedRange,
+                    direction: .forward
+                )
+                selectMatch(match, on: textView)
+
+            case let .selectPrevious(query):
+                let match = TextSearchService.nextMatchRange(
+                    for: query,
+                    in: currentText,
+                    from: textView.selectedRange,
+                    direction: .backward
+                )
+                selectMatch(match, on: textView)
+
+            case let .replaceCurrent(query, replacement):
+                let selectedRange = textView.selectedRange
+
+                if TextSearchService.selectionMatchesQuery(selectedRange, query: query, in: currentText) {
+                    let replacementLength = (replacement as NSString).length
+                    let replacementRange = NSRange(location: selectedRange.location, length: replacementLength)
+                    let updatedText = (currentText as NSString).replacingCharacters(in: selectedRange, with: replacement)
+                    let searchAnchor = NSRange(location: replacementRange.location + replacementRange.length, length: 0)
+                    let nextMatch = TextSearchService.nextMatchRange(
+                        for: query,
+                        in: updatedText,
+                        from: searchAnchor,
+                        direction: .forward
+                    )
+                    applyMutation(
+                        on: textView,
+                        replacementRange: selectedRange,
+                        replacementText: replacement,
+                        selectedRange: nextMatch ?? searchAnchor
+                    )
+                } else {
+                    let match = TextSearchService.nextMatchRange(
+                        for: query,
+                        in: currentText,
+                        from: selectedRange,
+                        direction: .forward
+                    )
+                    selectMatch(match, on: textView)
+                }
+
+            case let .replaceAll(query, replacement):
+                let result = TextSearchService.replacingAll(query: query, replacement: replacement, in: currentText)
+                guard result.count > 0 else {
+                    return
+                }
+
+                let targetRange = result.firstReplacedRange.map {
+                    NSRange(location: $0.location + $0.length, length: 0)
+                } ?? NSRange(location: 0, length: 0)
+
+                applyMutation(
+                    on: textView,
+                    replacementRange: NSRange(location: 0, length: currentText.utf16.count),
+                    replacementText: result.text,
+                    selectedRange: targetRange
+                )
+            }
+        }
+
+        private func selectMatch(_ range: NSRange?, on textView: UITextView) {
+            guard let range else {
+                return
+            }
+
+            isFocused = true
+            textView.selectedRange = range
+            textView.scrollRangeToVisible(range)
+            applyStyledText(on: textView, value: textView.text ?? "", selectedRange: range, force: true)
         }
 
         private func applyMutation(on textView: UITextView, replacementRange: NSRange, replacementText: String, selectedRange: NSRange) {
@@ -2332,18 +2427,105 @@ private struct PlatformMarkdownTextView: NSViewRepresentable {
 
             lastHandledCommandID = command.id
 
-            if let mutation = MarkdownEditorStyler.commandMutation(for: command.action, in: textView.string, selectedRange: textView.selectedRange()) {
-                applyMutation(
-                    on: textView,
-                    replacementRange: mutation.replacementRange,
-                    replacementText: mutation.replacementText,
-                    selectedRange: mutation.selectedRange
-                )
+            switch command.action {
+            case let .find(findAction):
+                applyFindAction(findAction, on: textView)
+            default:
+                if let mutation = MarkdownEditorStyler.commandMutation(for: command.action, in: textView.string, selectedRange: textView.selectedRange()) {
+                    applyMutation(
+                        on: textView,
+                        replacementRange: mutation.replacementRange,
+                        replacementText: mutation.replacementText,
+                        selectedRange: mutation.selectedRange
+                    )
+                }
             }
 
             DispatchQueue.main.async {
                 onCommandHandled(command.id)
             }
+        }
+
+        private func applyFindAction(_ action: EditorFindCanvasAction, on textView: NSTextView) {
+            let currentText = textView.string
+
+            switch action {
+            case let .selectNext(query):
+                let match = TextSearchService.nextMatchRange(
+                    for: query,
+                    in: currentText,
+                    from: textView.selectedRange(),
+                    direction: .forward
+                )
+                selectMatch(match, on: textView)
+
+            case let .selectPrevious(query):
+                let match = TextSearchService.nextMatchRange(
+                    for: query,
+                    in: currentText,
+                    from: textView.selectedRange(),
+                    direction: .backward
+                )
+                selectMatch(match, on: textView)
+
+            case let .replaceCurrent(query, replacement):
+                let selectedRange = textView.selectedRange()
+
+                if TextSearchService.selectionMatchesQuery(selectedRange, query: query, in: currentText) {
+                    let replacementLength = (replacement as NSString).length
+                    let replacementRange = NSRange(location: selectedRange.location, length: replacementLength)
+                    let updatedText = (currentText as NSString).replacingCharacters(in: selectedRange, with: replacement)
+                    let searchAnchor = NSRange(location: replacementRange.location + replacementRange.length, length: 0)
+                    let nextMatch = TextSearchService.nextMatchRange(
+                        for: query,
+                        in: updatedText,
+                        from: searchAnchor,
+                        direction: .forward
+                    )
+                    applyMutation(
+                        on: textView,
+                        replacementRange: selectedRange,
+                        replacementText: replacement,
+                        selectedRange: nextMatch ?? searchAnchor
+                    )
+                } else {
+                    let match = TextSearchService.nextMatchRange(
+                        for: query,
+                        in: currentText,
+                        from: selectedRange,
+                        direction: .forward
+                    )
+                    selectMatch(match, on: textView)
+                }
+
+            case let .replaceAll(query, replacement):
+                let result = TextSearchService.replacingAll(query: query, replacement: replacement, in: currentText)
+                guard result.count > 0 else {
+                    return
+                }
+
+                let targetRange = result.firstReplacedRange.map {
+                    NSRange(location: $0.location + $0.length, length: 0)
+                } ?? NSRange(location: 0, length: 0)
+
+                applyMutation(
+                    on: textView,
+                    replacementRange: NSRange(location: 0, length: currentText.utf16.count),
+                    replacementText: result.text,
+                    selectedRange: targetRange
+                )
+            }
+        }
+
+        private func selectMatch(_ range: NSRange?, on textView: NSTextView) {
+            guard let range else {
+                return
+            }
+
+            isFocused = true
+            textView.setSelectedRange(range)
+            textView.scrollRangeToVisible(range)
+            applyStyledText(on: textView, value: textView.string, selectedRange: range, force: true)
         }
 
         private func applyMutation(on textView: NSTextView, replacementRange: NSRange, replacementText: String, selectedRange: NSRange) {
@@ -2674,6 +2856,8 @@ private enum MarkdownEditorStyler {
                 replacementText: replacement.replacementText,
                 selectedRange: replacement.selectedRange
             )
+        case .find:
+            return nil
         case .bold:
             return inlineWrapMutation(in: nsText, selectedRange: clampedRange, wrapper: "**")
         case .italic:

@@ -37,6 +37,11 @@ struct EditorRootView: View {
     @State private var pendingImageImportInsertionRange: NSRange?
     @State private var pendingTransitionAction: PendingTransitionAction?
     @State private var isShowingUnsavedChangesDialog = false
+    @State private var isShowingSearchPanel = false
+    @State private var isShowingReplaceField = false
+    @State private var searchQuery = ""
+    @State private var replacementText = ""
+    @FocusState private var isSearchFieldFocused: Bool
 
     @EnvironmentObject private var session: EditorSessionStore
     @EnvironmentObject private var settings: EditorSettingsStore
@@ -61,6 +66,10 @@ struct EditorRootView: View {
 
     private var wordCount: Int {
         MarkdownAnalyzer.wordCount(for: session.text)
+    }
+
+    private var searchMatchCount: Int {
+        TextSearchService.matchRanges(for: searchQuery, in: session.text).count
     }
 
     private var currentDocumentTitle: String {
@@ -125,6 +134,15 @@ struct EditorRootView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .zIndex(3)
             }
+
+            if isShowingSearchPanel {
+                searchPanel
+                    .padding(.top, settings.showToolbar ? 14 : 10)
+                    .padding(.trailing, 14)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .zIndex(4)
+            }
         }
         .navigationTitle(currentDocumentTitle)
         .onAppear {
@@ -142,6 +160,11 @@ struct EditorRootView: View {
             guard let saveRequest = session.saveRequest else { return }
             session.consumeSaveRequest()
             handleSaveRequest(saveRequest)
+        }
+        .onChange(of: session.findRequest?.id) { _, _ in
+            guard let findRequest = session.findRequest else { return }
+            session.consumeFindRequest()
+            handleFindRequest(findRequest.action)
         }
         .fileImporter(
             isPresented: $isImportingDocument,
@@ -273,6 +296,16 @@ struct EditorRootView: View {
 
             Button("Save As...") {
                 session.requestSave(forceSaveAs: true)
+            }
+
+            Divider()
+
+            Button("Find") {
+                session.requestFind()
+            }
+
+            Button("Replace") {
+                session.requestReplace()
             }
 
             Divider()
@@ -502,6 +535,147 @@ struct EditorRootView: View {
         .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.18 : 0.08), radius: 18, y: 8)
     }
 
+    private var searchPanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                searchField(
+                    title: "Find",
+                    text: $searchQuery,
+                    prompt: "Find"
+                )
+                .focused($isSearchFieldFocused)
+                .onSubmit {
+                    findNext()
+                }
+
+                Button {
+                    findPrevious()
+                } label: {
+                    Image(systemName: "chevron.up")
+                }
+                .buttonStyle(.plain)
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+                .disabled(searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                Button {
+                    findNext()
+                } label: {
+                    Image(systemName: "chevron.down")
+                }
+                .buttonStyle(.plain)
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+                .disabled(searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                Button(isShowingReplaceField ? "Hide Replace" : "Replace") {
+                    withAnimation(.spring(response: 0.24, dampingFraction: 0.92)) {
+                        isShowingReplaceField.toggle()
+                    }
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 12, weight: .semibold))
+
+                Button {
+                    dismissSearchPanel()
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.plain)
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+            }
+
+            if isShowingReplaceField {
+                HStack(spacing: 10) {
+                    searchField(
+                        title: "Replace",
+                        text: $replacementText,
+                        prompt: "Replace"
+                    )
+                    .onSubmit {
+                        replaceCurrentMatch()
+                    }
+
+                    Button("Replace") {
+                        replaceCurrentMatch()
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12, weight: .semibold))
+                    .disabled(searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                    Button("Replace All") {
+                        replaceAllMatches()
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12, weight: .semibold))
+                    .disabled(searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+
+            HStack(spacing: 8) {
+                if searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("Type to search the current document")
+                } else if searchMatchCount == 0 {
+                    Text("No matches")
+                } else if searchMatchCount == 1 {
+                    Text("1 match")
+                } else {
+                    Text("\(searchMatchCount) matches")
+                }
+
+                Spacer(minLength: 0)
+            }
+            .font(.system(size: 11.5, weight: .medium))
+            .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.58) : Color.black.opacity(0.48))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .frame(maxWidth: 420, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(
+                    colorScheme == .dark
+                        ? Color(red: 0.12, green: 0.125, blue: 0.135).opacity(0.96)
+                        : Color.white.opacity(0.94)
+                )
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(
+                    colorScheme == .dark
+                        ? Color.white.opacity(0.07)
+                        : Color.black.opacity(0.08),
+                    lineWidth: 0.8
+                )
+        }
+        .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.22 : 0.08), radius: 16, y: 8)
+    }
+
+    private func searchField(title: String, text: Binding<String>, prompt: String) -> some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.62) : Color.black.opacity(0.46))
+
+            TextField(prompt, text: text)
+                .textFieldStyle(.plain)
+                .font(.system(size: 13))
+                .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.92) : Color.black.opacity(0.82))
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(
+                    colorScheme == .dark
+                        ? Color.white.opacity(0.06)
+                        : Color.black.opacity(0.035)
+                )
+        )
+    }
+
     @ViewBuilder
     private func editorWorkspace(in size: CGSize) -> some View {
         ZStack(alignment: .topTrailing) {
@@ -706,6 +880,81 @@ struct EditorRootView: View {
 
     private func issueCanvasCommand(_ action: EditorCanvasCommand.Action) {
         pendingCanvasCommand = EditorCanvasCommand(action: action)
+    }
+
+    private func handleFindRequest(_ action: EditorFindAction) {
+        switch action {
+        case .openFind:
+            presentSearchPanel(showReplace: false)
+        case .openReplace:
+            presentSearchPanel(showReplace: true)
+        case .findNext:
+            presentSearchPanel(showReplace: false)
+            findNext()
+        case .findPrevious:
+            presentSearchPanel(showReplace: false)
+            findPrevious()
+        }
+    }
+
+    private func presentSearchPanel(showReplace: Bool) {
+        withAnimation(.spring(response: 0.24, dampingFraction: 0.92)) {
+            isShowingSearchPanel = true
+            if showReplace {
+                isShowingReplaceField = true
+            }
+        }
+
+        DispatchQueue.main.async {
+            isSearchFieldFocused = true
+        }
+    }
+
+    private func dismissSearchPanel() {
+        withAnimation(.spring(response: 0.24, dampingFraction: 0.92)) {
+            isShowingSearchPanel = false
+        }
+        isSearchFieldFocused = false
+    }
+
+    private func findNext() {
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else {
+            isSearchFieldFocused = true
+            return
+        }
+
+        issueCanvasCommand(.find(.selectNext(query: query)))
+    }
+
+    private func findPrevious() {
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else {
+            isSearchFieldFocused = true
+            return
+        }
+
+        issueCanvasCommand(.find(.selectPrevious(query: query)))
+    }
+
+    private func replaceCurrentMatch() {
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else {
+            isSearchFieldFocused = true
+            return
+        }
+
+        issueCanvasCommand(.find(.replaceCurrent(query: query, replacement: replacementText)))
+    }
+
+    private func replaceAllMatches() {
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else {
+            isSearchFieldFocused = true
+            return
+        }
+
+        issueCanvasCommand(.find(.replaceAll(query: query, replacement: replacementText)))
     }
 
     private func handleCanvasCommand(_ commandID: UUID) {
