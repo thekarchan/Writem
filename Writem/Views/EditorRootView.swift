@@ -431,7 +431,9 @@ struct EditorRootView: View {
             Text("\(wordCount) words")
             Text("\(outline.count) headings")
             Text("\(issues.count) checks")
-            Text(session.autosaveStatusText)
+            if let autosaveStatusText = session.autosaveStatusText {
+                Text(autosaveStatusText)
+            }
             if let lastImportedAsset {
                 Text(lastImportedAsset.relativePath)
                     .lineLimit(1)

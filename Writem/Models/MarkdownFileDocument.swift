@@ -127,14 +127,14 @@ final class EditorSessionStore: ObservableObject {
         return limited.isEmpty ? "Untitled" : limited
     }
 
-    var autosaveStatusText: String {
+    var autosaveStatusText: String? {
         switch autosaveState {
         case .idle:
-            return fileURL == nil ? "Draft ready" : "Saved"
+            return nil
         case .saving:
             return fileURL == nil ? "Saving draft..." : "Saving..."
         case .saved:
-            return fileURL == nil ? "Draft saved locally" : "Autosaved"
+            return nil
         case .failed:
             return fileURL == nil ? "Draft save failed" : "Autosave failed"
         }

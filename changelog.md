@@ -5,6 +5,7 @@ Dates use the local repository commit date.
 
 ## 2026-03-12
 
+- Make autosave status appear only when saving or on failure
 - Add explicit autosave status and undo/redo support
 - Add a Settings menu with an iCloud sync toggle
 - Remove the duplicate document title from the in-editor toolbar
